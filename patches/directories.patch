@@ -1,0 +1,12 @@
+--- main.c.orig	2018-01-04 20:11:16.000000000 +0100
++++ main.c	2018-01-04 20:11:57.000000000 +0100
+@@ -30,9 +30,6 @@
+ #include "extern.h"
+ #include "parse.h"
+ 
+-#define WWW_DIR "/var/www/acme"
+-#define CONF_FILE "/etc/acme-client.conf"
+-
+ int
+ main(int argc, char *argv[])
+ {

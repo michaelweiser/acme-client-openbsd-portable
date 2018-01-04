@@ -89,6 +89,7 @@ cat <<EOF >> Makefile.am
 acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
 
 dist_sysconf_DATA = acme-client.conf
+acme_client_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' -DWWW_DIR='"\$(wwwdir)"'
 acme_client_CFLAGS = \$(WARN_CFLAGS) \$(LIBTLS_CFLAGS) \$(LIBCRYPTO_CFLAGS)
 acme_client_LDFLAGS = \$(WARN_LDFLAGS)
 acme_client_LDADD = \$(LIBOBJS) \$(LIBTLS_LIBS) \$(LIBCRYPTO_LIBS)
@@ -107,7 +108,13 @@ awk -v version=$version -v bugurl=$bugurl \
 	print;
 	print("AM_INIT_AUTOMAKE([foreign -Wall -Werror])" RS \
 		"m4_include([m4/act_search_libs.m4])" RS \
-		"m4_include([m4/act_check_program.m4])");
+		"m4_include([m4/act_check_program.m4])" RS \
+		"AC_ARG_WITH([www-dir]," RS \
+		"	[AS_HELP_STRING([--with-www-dir=DIR]," RS \
+		"		[default challenge directory])]," RS \
+		"		[wwwdir=$withval]," RS \
+		"		[wwwdir=\"/var/www/acme\"])" RS \
+		"AC_SUBST([wwwdir], [$wwwdir])");
 	next;
 }
 /^AC_CONFIG_HEADERS/ {
