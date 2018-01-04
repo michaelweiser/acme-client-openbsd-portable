@@ -1,3 +1,9 @@
+AC_ARG_WITH([default-ca-file],
+	[AS_HELP_STRING([--with-default-ca-file=DIR],
+		[default ca certificate bundle])],
+		[defaultcafile=$withval],
+		[defaultcafile=/etc/ssl/cert.pem])
+AC_SUBST([defaultcafile], [$defaultcafile])
 AC_ARG_WITH([www-dir],
 	[AS_HELP_STRING([--with-www-dir=DIR],
 		[default challenge directory])],

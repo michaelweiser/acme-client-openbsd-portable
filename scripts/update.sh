@@ -102,7 +102,8 @@ acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
 AM_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
 	-DWWW_DIR='"\$(wwwdir)"' \\
 	-DPRIVSEP_PATH='"\$(privseppath)"' \\
-	-DPRIVSEP_USER='"\$(privsepuser)"'
+	-DPRIVSEP_USER='"\$(privsepuser)"' \\
+	-DDEFAULT_CA_FILE='"\$(defaultcafile)"'
 
 dist_sysconf_DATA = acme-client.conf
 acme_client_CFLAGS = \$(WARN_CFLAGS) \$(LIBTLS_CFLAGS) \$(LIBCRYPTO_CFLAGS)
