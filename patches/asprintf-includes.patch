@@ -1,0 +1,22 @@
+Darwin
+
+--- asprintf.c.orig	2018-01-04 15:22:30.000000000 +0100
++++ asprintf.c	2018-01-04 15:25:51.000000000 +0100
+@@ -19,11 +19,15 @@
+ 
+ #include "config.h"
+ 
+-#ifndef HAVE_VASPRINTF
+-
+ #include <errno.h>
+ #include "bsd-stdarg.h"
+ #include "bsd-stdlib.h"
++#ifdef HAVE_LIMITS_H
++#include <limits.h>
++#endif
++#include <stdio.h>
++
++#ifndef HAVE_VASPRINTF
+ 
+ #define INIT_SZ	128
+ 

@@ -1,0 +1,10 @@
+--- recallocarray.c.orig	2018-01-04 16:29:53.000000000 +0100
++++ recallocarray.c	2018-01-04 16:30:29.000000000 +0100
+@@ -27,6 +27,7 @@
+ #endif
+ #include <string.h>
+ #include "bsd-unistd.h"
++#include "bsd-strings.h"	/* explicit_bzero(3) */
+ 
+ /*
+  * This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX

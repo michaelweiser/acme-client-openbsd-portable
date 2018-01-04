@@ -1,11 +1,12 @@
 #ifndef ACME_CLIENT_UNISTD_H
 #define ACME_CLIENT_UNISTD_H
 
-#include <bsd/unistd.h>
+#include "config.h"
+
+#include <unistd.h>
 
 #ifndef HAVE_PLEDGE
-/* pledge is highly OpenBSD-specific */
-#define pledge(x, y) (0)
+int pledge(const char *, const char *);
 #endif
 
 #endif /* ACME_CLIENT_UNISTD_H */
