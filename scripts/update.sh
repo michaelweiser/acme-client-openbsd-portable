@@ -28,29 +28,32 @@ os=/tmp/openssh
 [ -e "$os" ] || \
 	git clone --depth=1 "$openssh" "$os"
 
-# get some BSD functions that aren't in libbsd
+# get some BSD functions that aren't typically available on non-BSD systems
 sed "/include.*base64\.h/s/base64\.h/b64_ntop.h/" \
 	"$os"/openbsd-compat/base64.c > b64_ntop.c
 cp "$os"/openbsd-compat/base64.h b64_ntop.h
 cp "$os"/openbsd-compat/bsd-asprintf.c asprintf.c
-cp "$os"/openbsd-compat/{re{,c}allocarray,strtonum,explicit_bzero}.c .
+cp "$os"/openbsd-compat/{strtonum,strlcat,strlcpy}.c .
+cp "$os"/openbsd-compat/{re{,c}allocarray,explicit_bzero}.c .
+cp "$os"/openbsd-compat/sys-queue.h bsd-sys-queue.h
 
 # make openssh bits include our config.h instead of theis includes.h
-for i in b64_ntop.[ch] asprintf.c \
-		{re{,c}allocarray,strtonum,explicit_bzero}.c ; do
+for i in b64_ntop.[ch] asprintf.c {strtonum,strlcat,strlcpy}.c \
+		{re{,c}allocarray,explicit_bzero}.c ; do
 	sed -e "/include.*includes\.h/s/includes\.h/config.h/" \
 		$i > $i.tmp
 	mv $i.tmp $i
 done
 
-# redirect some includes to augmented ones with additional definitions and
-# inclusion of bsdlib variants, others directly to the bsdlib versions
+# redirect some includes to augmented ones with additional definitions
 for i in *.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
+		-e 's,<string\.h>,"bsd-string.h",g' \
 		-e 's,<strings\.h>,"bsd-strings.h",g' \
 		-e 's,<unistd\.h>,"bsd-unistd.h",g' \
 		-e 's,<stdarg\.h>,"bsd-stdarg.h",g' \
 		-e 's,<resolv\.h>,"bsd-resolv.h",g' \
+		-e 's,<sys/queue\.h>,"bsd-sys-queue.h",g' \
 		$i > $i.tmp
 	mv $i.tmp $i
 done
@@ -139,7 +142,8 @@ awk -v version=$version -v bugurl=$bugurl \
 	# fails. Other variants leave it in undefined state which the OpenBSD
 	# source may not expect.
 	print("AC_LIBOBJ([asprintf])" RS \
-		"AC_REPLACE_FUNCS([pledge reallocarray recallocarray strtonum])");
+		"AC_REPLACE_FUNCS([pledge reallocarray recallocarray " \
+			"strtonum strlcat strlcpy])");
 
 	print("ACT_SEARCH_LIBS_HAVE([__b64_ntop]," RS \
 		"	[[#include <resolv.h>]]," RS \
