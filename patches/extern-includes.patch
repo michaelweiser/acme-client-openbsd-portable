@@ -1,0 +1,13 @@
+FreeBSD
+
+--- extern.h.orig	2018-01-04 19:27:05.000000000 +0100
++++ extern.h	2018-01-04 19:27:25.000000000 +0100
+@@ -20,6 +20,8 @@
+ #include "config.h"
+ #include "parse.h"
+ 
++#include <sys/types.h>
++
+ #define MAX_SERVERS_DNS 8
+ 
+ #ifndef nitems
