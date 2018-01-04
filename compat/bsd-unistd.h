@@ -5,6 +5,8 @@
 
 #include <unistd.h>
 
+#include "bsd-setres_id.h"
+
 #ifndef HAVE_PLEDGE
 int pledge(const char *, const char *);
 #endif

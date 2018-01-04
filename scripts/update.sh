@@ -14,8 +14,10 @@ obsd=/tmp/openbsd
 if ! [ -e "$obsd" ] ; then
 	mkdir "$obsd"
 	cd "$obsd"
-	cvs -qd "$upstream" checkout -P src/etc/acme-client.conf
-	cvs -qd "$upstream" checkout -P src/usr.sbin/acme-client
+	cvs -qd "$upstream" checkout -P \
+		src/etc/acme-client.conf \
+		src/usr.sbin/acme-client \
+		src/sys/sys/pledge.h
 	find "$obsd" -name CVS -prune -exec rm -rf {} \;
 	cd "$srcdir"
 fi
@@ -23,6 +25,7 @@ fi
 # copy over the source
 cp "$obsd"/src/etc/acme-client.conf "$srcdir"
 cp "$obsd"/src/usr.sbin/acme-client/* "$srcdir"
+cp "$obsd"/src/sys/sys/pledge.h "$srcdir"/bsd-sys-pledge.h
 
 os=/tmp/openssh
 [ -e "$os" ] || \
@@ -32,13 +35,20 @@ os=/tmp/openssh
 sed "/include.*base64\.h/s/base64\.h/b64_ntop.h/" \
 	"$os"/openbsd-compat/base64.c > b64_ntop.c
 cp "$os"/openbsd-compat/base64.h b64_ntop.h
-cp "$os"/openbsd-compat/bsd-asprintf.c asprintf.c
+cp "$os"/openbsd-compat/bsd-asprintf.c bsd-asprintf.c
+sed -e "s/error(/warnx(/" \
+	-e '/include.*log\.h/s/log\.h/err.h/' \
+	-e "/include.*sys\/types\.h/a\\
+#include <errno.h>" \
+	"$os"/openbsd-compat/bsd-setres_id.c > bsd-setres_id.c
+cp "$os"/openbsd-compat/bsd-setres_id.h .
 cp "$os"/openbsd-compat/{strtonum,strlcat,strlcpy}.c .
 cp "$os"/openbsd-compat/{re{,c}allocarray,explicit_bzero}.c .
 cp "$os"/openbsd-compat/sys-queue.h bsd-sys-queue.h
 
 # make openssh bits include our config.h instead of theis includes.h
-for i in b64_ntop.[ch] asprintf.c {strtonum,strlcat,strlcpy}.c \
+for i in b64_ntop.[ch] bsd-asprintf.c {strtonum,strlcat,strlcpy}.c \
+		bsd-setres_id.c \
 		{re{,c}allocarray,explicit_bzero}.c ; do
 	sed -e "/include.*includes\.h/s/includes\.h/config.h/" \
 		$i > $i.tmp
@@ -88,8 +98,13 @@ rm -f Makefile
 cat <<EOF >> Makefile.am
 acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
 
+# AM_CPPFLAGS so it also applies to LIBOBJS
+AM_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
+	-DWWW_DIR='"\$(wwwdir)"' \\
+	-DPRIVSEP_PATH='"\$(privseppath)"' \\
+	-DPRIVSEP_USER='"\$(privsepuser)"'
+
 dist_sysconf_DATA = acme-client.conf
-acme_client_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' -DWWW_DIR='"\$(wwwdir)"'
 acme_client_CFLAGS = \$(WARN_CFLAGS) \$(LIBTLS_CFLAGS) \$(LIBCRYPTO_CFLAGS)
 acme_client_LDFLAGS = \$(WARN_LDFLAGS)
 acme_client_LDADD = \$(LIBOBJS) \$(LIBTLS_LIBS) \$(LIBCRYPTO_LIBS)
@@ -109,12 +124,7 @@ awk -v version=$version -v bugurl=$bugurl \
 	print("AM_INIT_AUTOMAKE([foreign -Wall -Werror])" RS \
 		"m4_include([m4/act_search_libs.m4])" RS \
 		"m4_include([m4/act_check_program.m4])" RS \
-		"AC_ARG_WITH([www-dir]," RS \
-		"	[AS_HELP_STRING([--with-www-dir=DIR]," RS \
-		"		[default challenge directory])]," RS \
-		"		[wwwdir=$withval]," RS \
-		"		[wwwdir=\"/var/www/acme\"])" RS \
-		"AC_SUBST([wwwdir], [$wwwdir])");
+		"m4_include([m4/args.m4])");
 	next;
 }
 /^AC_CONFIG_HEADERS/ {
@@ -139,44 +149,7 @@ awk -v version=$version -v bugurl=$bugurl \
 }
 /^AC_CHECK_FUNCS/ {
 	print
-
-	# vasprintf is used by asprintf replacement
-	# memset_s is used by explicit_bzero replacement
-	print("AC_CHECK_FUNCS([vasprintf memset_s])");
-
-	# we always use the openssh version of asprintf because it
-	# deterministically NULLs the return pointer if memory allocation
-	# fails. Other variants leave it in undefined state which the OpenBSD
-	# source may not expect.
-	print("AC_LIBOBJ([asprintf])" RS \
-		"AC_REPLACE_FUNCS([pledge reallocarray recallocarray " \
-			"strtonum strlcat strlcpy])");
-
-	print("ACT_SEARCH_LIBS_HAVE([__b64_ntop]," RS \
-		"	[[#include <resolv.h>]]," RS \
-		"	[[__b64_ntop(NULL, 0, NULL, 0);]]," RS \
-		"	[resolv])" RS \
-		"ACT_SEARCH_LIBS_HAVE([b64_ntop]," RS \
-		"	[[#include <resolv.h>]]," RS \
-		"	[[b64_ntop(NULL, 0, NULL, 0);]]," RS \
-		"	[resolv])" RS \
-		"AS_IF([test \"x$ac_cv_search___b64_ntop\" != xno],[]," RS \
-		"	[test \"x$ac_cv_search_b64_ntop\" != xno],[]," RS \
-		"	[AC_LIBOBJ([b64_ntop])])" RS \
-		"ACT_CHECK_PROGRAM([va_copy]," RS \
-		"	[[#include <stdarg.h>" RS \
-		"		va_list x,y;]]," RS \
-		"	[[va_copy(x, y);]])" RS \
-		"ACT_CHECK_PROGRAM([__va_copy]," RS \
-		"	[[#include <stdarg.h>" RS \
-		"		va_list x,y;]]," RS \
-		"	[[__va_copy(x, y);]])");
-
-	# statically disable b64_pton in b64_ntop.c because we do not need it
-	print("AC_DEFINE([HAVE_B64_PTON],[1],[not needed])");
-
-	# compatibility with older bison (e.g. 2.3 on Darwin)
-	print("AC_DEFINE([YYSTYPE_IS_DECLARED],[1],[old bison])");
+	print("m4_include([m4/funcs.m4])");
 	next;
 }
 # we assume some functions to be present and working
