@@ -1,0 +1,22 @@
+--- parse.y.orig	2018-01-04 02:57:21.536252257 +0100
++++ parse.y	2018-01-04 03:01:09.978361411 +0100
+@@ -438,7 +438,7 @@
+ 
+ #define MAXPUSHBACK	128
+ 
+-u_char	*parsebuf;
++char	*parsebuf;
+ int	 parseindex;
+ u_char	 pushback_buffer[MAXPUSHBACK];
+ int	 pushback_index = 0;
+@@ -533,8 +533,8 @@
+ int
+ yylex(void)
+ {
+-	u_char	 buf[8096];
+-	u_char	*p, *val;
++	char	 buf[8096];
++	char	*p, *val;
+ 	int	 quotec, next, c;
+ 	int	 token;
+ 

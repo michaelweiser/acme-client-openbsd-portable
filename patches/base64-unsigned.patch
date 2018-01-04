@@ -1,0 +1,11 @@
+--- base64.c.orig	2018-01-04 02:52:25.182255084 +0100
++++ base64.c	2018-01-04 02:55:41.448253212 +0100
+@@ -49,7 +49,7 @@
+ 	if ((buf = malloc(sz)) == NULL)
+ 		return NULL;
+ 
+-	b64_ntop(data, len, buf, sz);
++	b64_ntop((unsigned char *)data, len, buf, sz);
+ 
+ 	for (i = 0; i < sz; i++)
+ 		switch (buf[i]) {
