@@ -25,13 +25,16 @@ cp "$obsd"/src/usr.sbin/acme-client/* "$srcdir"
 
 # redirect some includes to augmented ones with additional definitions and
 # inclusion of bsdlib variants, others directly to the bsdlib versions
-sed -i -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
-	-e 's,<unistd\.h>,"bsd-unistd.h",g' \
-	-e 's,<err\.h>,"bsd/err.h",g' \
-	-e 's,<stdio\.h>,"bsd/stdio.h",g' \
-	-e 's,<string\.h>,"bsd/string.h",g' \
-	-e 's,<sys/queue\.h>,"bsd/sys/queue.h",g' \
-	*.[chy]
+for i in *.[chy] ; do
+	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
+		-e 's,<unistd\.h>,"bsd-unistd.h",g' \
+		-e 's,<err\.h>,"bsd/err.h",g' \
+		-e 's,<stdio\.h>,"bsd/stdio.h",g' \
+		-e 's,<string\.h>,"bsd/string.h",g' \
+		-e 's,<sys/queue\.h>,"bsd/sys/queue.h",g' \
+		$i > $i.tmp
+	mv $i.tmp $i
+done
 
 # have all files source config.h
 for i in *.[chy] ; do
@@ -50,13 +53,16 @@ cp "$os"/openbsd-compat/bsd-asprintf.c asprintf.c
 cp "$os"/openbsd-compat/re{,c}allocarray.c .
 
 # make openssh bits include our config.h instead of theis includes.h
-sed -i -e "/include.*includes\.h/s/includes\.h/config.h/" \
-	b64_ntop.[ch] asprintf.c re{,c}allocarray.*
+for i in b64_ntop.[ch] asprintf.c re{,c}allocarray.* ; do
+	sed -e "/include.*includes\.h/s/includes\.h/config.h/" \
+		$i > $i.tmp
+	mv $i.tmp $i
+done
 
 # install our own glue
 cp compat/* .
 
-# patch 
+# patch
 for i in patches/* ; do
 	patch -p0 < $i
 done
