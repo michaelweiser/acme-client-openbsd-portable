@@ -35,21 +35,26 @@ os=/tmp/openssh
 sed "/include.*base64\.h/s/base64\.h/b64_ntop.h/" \
 	"$os"/openbsd-compat/base64.c > b64_ntop.c
 cp "$os"/openbsd-compat/base64.h b64_ntop.h
-cp "$os"/openbsd-compat/bsd-asprintf.c bsd-asprintf.c
 sed -e "s/error(/warnx(/" \
 	-e '/include.*log\.h/s/log\.h/err.h/' \
 	-e "/include.*sys\/types\.h/a\\
 #include <errno.h>" \
 	"$os"/openbsd-compat/bsd-setres_id.c > bsd-setres_id.c
-cp "$os"/openbsd-compat/bsd-setres_id.h .
-cp "$os"/openbsd-compat/{strtonum,strlcat,strlcpy}.c .
-cp "$os"/openbsd-compat/{re{,c}allocarray,explicit_bzero}.c .
 cp "$os"/openbsd-compat/sys-queue.h bsd-sys-queue.h
 
+for i in bsd-asprintf.c bsd-setres_id.h \
+		strtonum.c strlcat.c strlcpy.c \
+		reallocarray.c recallocarray.c \
+		explicit_bzero.c ; do
+	cp "$os"/openbsd-compat/$i .
+done
+
 # make openssh bits include our config.h instead of theis includes.h
-for i in b64_ntop.[ch] bsd-asprintf.c {strtonum,strlcat,strlcpy}.c \
-		bsd-setres_id.c \
-		{re{,c}allocarray,explicit_bzero}.c ; do
+for i in b64_ntop.[ch] \
+		bsd-asprintf.c bsd-setres_id.c \
+		strtonum.c strlcat.c strlcpy.c \
+		reallocarray.c recallocarray.c \
+		explicit_bzero.c ; do
 	sed -e "/include.*includes\.h/s/includes\.h/config.h/" \
 		$i > $i.tmp
 	mv $i.tmp $i
@@ -121,8 +126,8 @@ awk -v version=$version -v bugurl=$bugurl \
 	gsub(/FULL-PACKAGE-NAME/, "acme-client", $0);
 	gsub(/VERSION/, version, $0);
 	gsub(/BUG-REPORT-ADDRESS/, bugurl, $0);
-	print;
-	print("AM_INIT_AUTOMAKE([foreign -Wall -Werror])" RS \
+	print($0 RS \
+		"AM_INIT_AUTOMAKE([foreign -Wall -Werror])" RS \
 		"m4_include([m4/act_search_libs.m4])" RS \
 		"m4_include([m4/act_check_program.m4])" RS \
 		"m4_include([m4/args.m4])");
@@ -149,8 +154,7 @@ awk -v version=$version -v bugurl=$bugurl \
 	next;
 }
 /^AC_CHECK_FUNCS/ {
-	print
-	print("m4_include([m4/funcs.m4])");
+	print($0 RS "m4_include([m4/funcs.m4])");
 	next;
 }
 # we assume some functions to be present and working
