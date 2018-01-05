@@ -1,5 +1,3 @@
-/*	$OpenBSD: kern_pledge.c,v 1.226 2017/12/12 01:12:34 deraadt Exp $	*/
-
 /*
  * OpenBSD:
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -7,6 +5,9 @@
  *
  * OpenSSH:
  * Copyright (c) 1999-2004 Damien Miller <djm@mindrot.org>
+ *
+ * acme-client:
+ * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,6 +20,8 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ *	$OpenBSD: kern_pledge.c,v 1.226 2017/12/12 01:12:34 deraadt Exp $
  */
 
 #include "config.h"
@@ -34,6 +37,19 @@
 
 #include <pwd.h> /* getpwnam() */
 #include <grp.h> /* setgroups() Linux */
+
+#ifdef HAVE_LIBSECCOMP
+#include <seccomp.h>
+
+/* headers for values in filters */
+#include <signal.h> /* SIGPIPE */
+#include <sys/socket.h> /* AF_{UNIX,INET,NETLINK} */
+#include <netinet/in.h> /* sockaddr_{in,in6} */
+#include <sys/un.h> /* sockaddr_un */
+#include <sys/ioctl.h> /* FIONREAD */
+#include <fcntl.h> /* O_RDWR */
+#include <linux/netlink.h> /* sockaddr_nl */
+#endif
 
 #include "bsd-sys-pledge.h"
 
@@ -128,6 +144,219 @@ void chroot_droppriv(uint64_t promises) {
 		err(EXIT_FAILURE, "failed to drop uid");
 }
 
+#ifdef HAVE_LIBSECCOMP
+struct {
+	const uint64_t promises;
+	const uint32_t action;
+	const char *syscall;
+	const int arg_cnt;
+	const struct scmp_arg_cmp args[3];
+} scsb_calls[] = {
+	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "exit", 0 },
+	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "exit_group", 0 }, /* glibc */
+	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "brk", 0 },
+
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "fstat", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "lseek", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "read", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "readv", 0 }, /* musl */
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "write", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "writev", 0 }, /* musl */
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "close", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "getpid", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "getrandom", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "mmap", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "munmap", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "mprotect", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "nanosleep", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "wait4", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "rt_sigaction", 1,
+		{ SCMP_A0(SCMP_CMP_EQ, SIGPIPE) }},
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "rt_sigreturn", 0 },
+
+	/* order is important here: the first specification a pledge run runs
+	 * into wins */
+	{ PLEDGE_WPATH, SCMP_ACT_ALLOW, "open", 1,
+		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_WRONLY) }},
+	{ PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
+		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_WRONLY) }},
+
+	/*{ PLEDGE_RPATH, SCMP_ACT_ALLOW, "open", 1,
+		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+	{ PLEDGE_RPATH, SCMP_ACT_ALLOW, "openat", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},*/
+
+	/* /etc/resolv.conf */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "open", 1,
+		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
+		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+
+	/* /etc/localtime, zoneinfo */
+	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "open", 1,
+		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
+		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+
+	/* dns: resolver, inet: ACME */
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv4 TCP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_STREAM, SOCK_STREAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_IP) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv4 UDP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_DGRAM, SOCK_DGRAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_IP) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv4 UDP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_DGRAM, SOCK_DGRAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_UDP) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv6 TCP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET6),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_STREAM, SOCK_STREAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_IP) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv6 UDP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET6),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_DGRAM, SOCK_DGRAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_IP) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv6 UDP */
+		{ SCMP_A0(SCMP_CMP_EQ, AF_INET6),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_DGRAM, SOCK_DGRAM),
+		  SCMP_A2(SCMP_CMP_EQ, IPPROTO_UDP) }},
+	/* TCP and glibc connect() of UDP socket to set default target */
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_in)) }},
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_in6)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "poll", 0 },
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "bind", 1, /* DNS UDP */
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_in)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "bind", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_in6)) }},
+	/* glibc with connect(DGRAM, default target) */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendto", 1,
+		{ SCMP_A5(SCMP_CMP_EQ, 0) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendto", 1, /* musl */
+		{ SCMP_A5(SCMP_CMP_EQ, sizeof(struct sockaddr_in)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendto", 1,
+		{ SCMP_A5(SCMP_CMP_EQ, sizeof(struct sockaddr_in6)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendmmsg", 0 },
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "ioctl", 1,
+		{ SCMP_A1(SCMP_CMP_EQ, FIONREAD) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "recvfrom", 0 },
+
+	/* ld.so.conf */
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "access", 0 },
+
+	/* nscd unix domain socket */
+	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, AF_UNIX),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_STREAM, SOCK_STREAM) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_un)) } },
+
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "fcntl", 2, /* /etc/hosts */
+		{ SCMP_A1(SCMP_CMP_EQ, F_SETFD),
+		  SCMP_A2(SCMP_CMP_EQ, FD_CLOEXEC) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "stat", 0 }, /* /etc/resolv.conf */
+
+	/* nscd unix domain socket */
+	{ PLEDGE_INET, SCMP_ACT_ERRNO(ECONNREFUSED), "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_un)) } },
+
+	/* AF_NETLINK getaddrinfo */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "socket", 3,
+		{ SCMP_A0(SCMP_CMP_EQ, AF_NETLINK),
+		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_RAW, SOCK_RAW),
+		  SCMP_A2(SCMP_CMP_EQ, NETLINK_ROUTE) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "bind", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_nl)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "getsockname", 0 },
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendto", 1,
+		{ SCMP_A5(SCMP_CMP_EQ, sizeof(struct sockaddr_nl)) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "recvmsg", 0 },
+
+	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "unlink", 0 },
+	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "rename", 0 },
+};
+
+static void
+seccomp_violation(int signum, siginfo_t *info, void *ctx)
+{
+	char *syscall = seccomp_syscall_resolve_num_arch(info->si_arch,
+			info->si_syscall);
+
+	(void)signum;
+	(void)ctx;
+
+	if (syscall != NULL) {
+		errx(EXIT_FAILURE, "seccomp, syscall: %s", syscall);
+		free(syscall); /* not reached */
+	}
+
+	errx(EXIT_FAILURE, "seccomp, syscall: %d", info->si_syscall);
+}
+
+void seccomp_filter(uint64_t promises) {
+	struct sigaction act;
+	sigset_t mask;
+	scmp_filter_ctx ctx;
+	int i;
+
+	/* specifically ignore the first pledge call from netproc because it
+	 * still needs to read stuff and will get back to us after */
+	if (promises == (PLEDGE_STDIO | PLEDGE_INET | PLEDGE_RPATH))
+		return;
+
+	memset(&act, 0, sizeof(act));
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGSYS);
+
+	act.sa_sigaction = &seccomp_violation;
+	act.sa_flags = SA_SIGINFO;
+	if (sigaction(SIGSYS, &act, NULL) == -1)
+		err(EXIT_FAILURE, "sigaction(SIGSYS)");
+	if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
+		err(EXIT_FAILURE, "sigprocmask(SIGSYS)");
+
+	if ((ctx = seccomp_init(SCMP_ACT_TRAP)) == NULL)
+		errx(EXIT_FAILURE, "seccomp_init");
+
+	for (i = 0; i < nitems(scsb_calls); i++) {
+		if ((scsb_calls[i].promises & promises) == 0)
+			continue;
+
+		switch (seccomp_rule_add_array(ctx,
+				scsb_calls[i].action,
+				seccomp_syscall_resolve_name(
+					scsb_calls[i].syscall),
+				scsb_calls[i].arg_cnt,
+				scsb_calls[i].args)) {
+			case 0:
+			case -EEXIST:
+				break;
+
+			default:
+				errx(EXIT_FAILURE, "seccomp_rule_add");
+				break;
+		}
+	}
+
+	// debug: seccomp_export_pfc(ctx, 2);
+	if (seccomp_load(ctx) != 0) {
+		seccomp_release(ctx);
+		err(EXIT_FAILURE, "seccomp_load");
+	}
+
+	seccomp_release(ctx);
+	return;
+}
+#endif
+
 /* bsearch over pledgereq. return flags value if found, 0 else */
 uint64_t
 pledgereq_flags(const char *req_name)
@@ -190,10 +419,13 @@ pledge(const char *p_req, const char *ep_req)
 		return -1;
 	}
 
-	dodbg("pledge: %s", p_req);
-
 	/* portable chroot() and setuid(), does not return on error */
 	chroot_droppriv(promises);
+
+#ifdef HAVE_LIBSECCOMP
+	/* seccomp restrictions, does not return on error*/
+	seccomp_filter(promises);
+#endif
 
 	return 0;
 }

@@ -22,3 +22,9 @@ AC_ARG_WITH([privsep-user],
 		[privsepuser=$withval],
 		[privsepuser=nobody])
 AC_SUBST([privsepuser], [$privsepuser])
+
+AC_ARG_WITH([seccomp],
+	[AS_HELP_STRING([--with-seccomp],
+		[enable seccomp syscall filtering @<:@default=check@:>@])],
+		[],
+		[with_seccomp=check])

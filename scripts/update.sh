@@ -111,9 +111,13 @@ AM_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
 	-DDEFAULT_CA_FILE='"\$(defaultcafile)"'
 
 dist_sysconf_DATA = acme-client.conf
-acme_client_CFLAGS = \$(WARN_CFLAGS) \$(LIBTLS_CFLAGS) \$(LIBCRYPTO_CFLAGS)
+acme_client_CFLAGS = \$(WARN_CFLAGS) \\
+	\$(libtls_CFLAGS) \$(libcrypto_CFLAGS) \\
+	\$(libseccomp_CFLAGS)
 acme_client_LDFLAGS = \$(WARN_LDFLAGS)
-acme_client_LDADD = \$(LIBOBJS) \$(LIBTLS_LIBS) \$(LIBCRYPTO_LIBS)
+acme_client_LDADD = \$(LIBOBJS) \\
+	\$(libtls_LIBS) \$(libcrypto_LIBS) \\
+	\$(libseccomp_LIBS)
 EOF
 
 # generate a configure.ac skeleton
@@ -148,9 +152,7 @@ awk -v version=$version -v bugurl=$bugurl \
 	next;
 }
 /^# Checks for libraries/ {
-	print($0 RS \
-		"PKG_CHECK_MODULES([LIBCRYPTO], [libcrypto >= 2.4.0])" RS \
-		"PKG_CHECK_MODULES([LIBTLS], [libtls >= 2.4.0])");
+	print($0 RS "m4_include([m4/libs.m4])");
 	next;
 }
 /^AC_CHECK_FUNCS/ {
