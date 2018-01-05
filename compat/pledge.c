@@ -84,6 +84,50 @@ static const struct {
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
+void chroot_droppriv(uint64_t promises) {
+	uid_t uid;
+	gid_t gid;
+	struct passwd *pwent;
+
+	if (promises & PLEDGE_RPATH || promises & PLEDGE_WPATH) {
+		/* processes which need to read or write stuff do their own
+		 * chroot()ing and priv-dropping if possible or will
+		 * come back again without those requests and will get
+		 * sandboxed then. */
+		return;
+	}
+
+	if ((pwent = getpwnam(PRIVSEP_USER)) == NULL)
+		errx(EXIT_FAILURE, "unknown user: " PRIVSEP_USER);
+
+	uid = pwent->pw_uid;
+	gid = pwent->pw_gid;
+
+	/* DNS resolution needs access to the actual /etc/resolv.conf.
+	 * For the network process, chrooting only works because it is
+	 * preloading the whole CA cert bundle at startup. It will not
+	 * work with a CA path directory because certificate search is
+	 * deferred until the TLS handshake. */
+	if ((promises & PLEDGE_DNS) == 0) {
+		if (chroot(PRIVSEP_PATH) != 0)
+			err(EXIT_FAILURE, "chroot('" PRIVSEP_PATH "')");
+
+		if (chdir("/") != 0)
+			err(EXIT_FAILURE, "chdir('/')");
+	}
+
+	if (setgroups(1, &gid) != 0 ||
+		setresgid(gid, gid, gid) != 0 ||
+		setresuid(uid, uid, uid) != 0 )
+		err(EXIT_FAILURE, "drop privileges");
+
+	if (getgid() != gid || getegid() != gid)
+		err(EXIT_FAILURE, "failed to drop gid");
+
+	if (getuid() != uid || geteuid() != uid)
+		err(EXIT_FAILURE, "failed to drop uid");
+}
+
 /* bsearch over pledgereq. return flags value if found, 0 else */
 uint64_t
 pledgereq_flags(const char *req_name)
@@ -136,59 +180,20 @@ pledge(const char *p_req, const char *ep_req)
 	uint64_t promises;
 
 	/* bail if we start to see exec promises */
-	if (ep_req != NULL)
-		errx(EXIT_FAILURE, "pledge: exec promises");
+	if (ep_req != NULL) {
+		errno = EINVAL;
+		return -1;
+	}
 
-	if (parsepledges(p_req, &promises) != 0)
-		errx(EXIT_FAILURE, "pledge: promises");
+	if (parsepledges(p_req, &promises) != 0)  {
+		errno = EINVAL;
+		return -1;
+	}
 
 	dodbg("pledge: %s", p_req);
 
-	if (promises & PLEDGE_RPATH ||
-			promises & PLEDGE_WPATH) {
-		/* processes which need to read or write stuff do their own
-		 * chroot()ing and priv-dropping if possible) or will
-		 * come back again without those requests and will get
-		 * sandboxed then. */
-		return 0;
-	} else if (promises & PLEDGE_STDIO) {
-		uid_t uid;
-		gid_t gid;
-		struct passwd *pwent;
-
-		/* plain no-nothing sandbox:
-		 * - chroot
-		 * - drop privs */
-		if ((pwent = getpwnam(PRIVSEP_USER)) == NULL)
-			errx(EXIT_FAILURE, "unknown user: " PRIVSEP_USER);
-
-		uid = pwent->pw_uid;
-		gid = pwent->pw_gid;
-
-		/* DNS resolution needs access to the actual /etc/resolv.conf. */
-		if ((promises & PLEDGE_DNS) == 0) {
-			dodbg("pledge: chrooting");
-			if (chroot(PRIVSEP_PATH) != 0)
-				err(EXIT_FAILURE, "chroot('" PRIVSEP_PATH "')");
-
-			if (chdir("/") != 0)
-				err(EXIT_FAILURE, "chdir('/')");
-		}
-
-		dodbg("pledge: dropping privileges");
-		if (setgroups(1, &gid) != 0 ||
-			setresgid(gid, gid, gid) != 0 ||
-			setresuid(uid, uid, uid) != 0 )
-			err(EXIT_FAILURE, "drop privileges");
-
-		if (getgid() != gid || getegid() != gid)
-			err(EXIT_FAILURE, "failed to drop gid");
-
-		if (getuid() != uid || geteuid() != uid)
-			err(EXIT_FAILURE, "failed to drop uid");
-	} else {
-		errx(EXIT_FAILURE, "process would be unconfined");
-	}
+	/* portable chroot() and setuid(), does not return on error */
+	chroot_droppriv(promises);
 
 	return 0;
 }
