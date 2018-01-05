@@ -1,0 +1,103 @@
+--- util.c.orig	2018-01-05 19:41:00.811633360 +0000
++++ util.c	2018-01-05 20:22:53.772456396 +0000
+@@ -308,3 +308,7 @@
+ 	}
+ 	return 1;
+ }
++
++void setcompname(enum comp comp) {
++	setprogname(comps[comp]);
++}
+--- extern.h.orig	2018-01-05 19:42:10.152227935 +0000
++++ extern.h	2018-01-05 20:22:46.187569012 +0000
+@@ -253,7 +253,7 @@
+ /*
+  * What component is the process within (COMP__MAX for none)?
+  */
+-enum comp	 proccomp;
++void 		 setcompname(enum comp);
+ 
+ __END_DECLS
+ 
+--- main.c.orig	2018-01-05 20:16:05.904954655 +0000
++++ main.c	2018-01-05 20:23:54.338920428 +0000
+@@ -46,7 +46,6 @@
+ 	int		  popts = 0;
+ 	pid_t		  pids[COMP__MAX];
+ 	extern int	  verbose;
+-	extern enum comp  proccomp;
+ 	size_t		  i, altsz, ne;
+ 
+ 	struct acme_conf	*conf = NULL;
+@@ -243,7 +242,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_NET] == 0) {
+-		proccomp = COMP_NET;
++		setcompname(COMP_NET);
+ 		close(key_fds[0]);
+ 		close(acct_fds[0]);
+ 		close(chng_fds[0]);
+@@ -274,7 +273,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_KEY] == 0) {
+-		proccomp = COMP_KEY;
++		setcompname(COMP_KEY);
+ 		close(cert_fds[0]);
+ 		close(dns_fds[0]);
+ 		close(rvk_fds[0]);
+@@ -296,7 +295,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_ACCOUNT] == 0) {
+-		proccomp = COMP_ACCOUNT;
++		setcompname(COMP_ACCOUNT);
+ 		free(alts);
+ 		close(cert_fds[0]);
+ 		close(dns_fds[0]);
+@@ -316,7 +315,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_CHALLENGE] == 0) {
+-		proccomp = COMP_CHALLENGE;
++		setcompname(COMP_CHALLENGE);
+ 		free(alts);
+ 		close(cert_fds[0]);
+ 		close(dns_fds[0]);
+@@ -335,7 +334,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_CERT] == 0) {
+-		proccomp = COMP_CERT;
++		setcompname(COMP_CERT);
+ 		free(alts);
+ 		close(dns_fds[0]);
+ 		close(rvk_fds[0]);
+@@ -353,7 +352,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_FILE] == 0) {
+-		proccomp = COMP_FILE;
++		setcompname(COMP_FILE);
+ 		free(alts);
+ 		close(dns_fds[0]);
+ 		close(rvk_fds[0]);
+@@ -374,7 +373,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_DNS] == 0) {
+-		proccomp = COMP_DNS;
++		setcompname(COMP_DNS);
+ 		free(alts);
+ 		close(rvk_fds[0]);
+ 		c = dnsproc(dns_fds[0]);
+@@ -389,7 +388,7 @@
+ 		err(EXIT_FAILURE, "fork");
+ 
+ 	if (pids[COMP_REVOKE] == 0) {
+-		proccomp = COMP_REVOKE;
++		setcompname(COMP_REVOKE);
+ 		c = revokeproc(rvk_fds[0], certdir,
+ 		    certfile != NULL ? certfile : fullchainfile,
+ 		    force, revocate,

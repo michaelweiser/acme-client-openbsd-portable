@@ -21,4 +21,8 @@ void *recallocarray(void *, size_t, size_t, size_t);
 long long strtonum(const char *, long long, long long, const char **);
 #endif
 
+#ifndef HAVE_SETPROGNAME
+void setprogname(const char *);
+#endif
+
 #endif /* ACME_CLIENT_STDLIB_H */
