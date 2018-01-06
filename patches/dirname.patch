@@ -1,0 +1,88 @@
+--- main.c.orig	2018-01-06 00:11:40.237778679 +0000
++++ main.c	2018-01-06 00:48:07.145973277 +0000
+@@ -30,6 +30,36 @@
+ #include "extern.h"
+ #include "parse.h"
+ 
++/* glibc dirname and basename (may) modify their input buffers, BSD uses static
++ * internal buffers. So we need to strdup twice to be on the safe side. */
++char *xdirname(char *path) {
++	char *dir;
++
++	if ((path = strdup(path)) == NULL)
++		err(EXIT_FAILURE, "strdup");
++	if ((dir = dirname(path)) == NULL)
++		err(EXIT_FAILURE, "dirname");
++	if ((dir = strdup(dir)) == NULL)
++		err(EXIT_FAILURE, "strdup");
++
++	free(path);
++	return dir;
++}
++
++char *xbasename(char *path) {
++	char *name;
++
++	if ((path = strdup(path)) == NULL)
++		err(EXIT_FAILURE, "strdup");
++	if ((name = basename(path)) == NULL)
++		err(EXIT_FAILURE, "basename");
++	if ((name = strdup(name)) == NULL)
++		err(EXIT_FAILURE, "strdup");
++
++	free(path);
++	return name;
++}
++
+ int
+ main(int argc, char *argv[])
+ {
+@@ -101,43 +131,22 @@
+ 	argv++;
+ 
+ 	if (domain->cert != NULL) {
+-		if ((certdir = dirname(domain->cert)) != NULL) {
+-			if ((certdir = strdup(certdir)) == NULL)
+-				err(EXIT_FAILURE, "strdup");
+-		} else
+-			err(EXIT_FAILURE, "dirname");
++		certdir = xdirname(domain->cert);
+ 	} else {
+ 		/* the parser enforces that at least cert or fullchain is set */
+-		if ((certdir = dirname(domain->fullchain)) != NULL) {
+-			if ((certdir = strdup(certdir)) == NULL)
+-				err(EXIT_FAILURE, "strdup");
+-		} else
+-			err(EXIT_FAILURE, "dirname");
+-
++		certdir = xdirname(domain->fullchain);
+ 	}
+ 
+ 	if (domain->cert != NULL) {
+-		if ((certfile = basename(domain->cert)) != NULL) {
+-			if ((certfile = strdup(certfile)) == NULL)
+-				err(EXIT_FAILURE, "strdup");
+-		} else
+-			err(EXIT_FAILURE, "basename");
++		certfile = xbasename(domain->cert);
+ 	}
+ 
+ 	if(domain->chain != NULL) {
+-		if ((chainfile = basename(domain->chain)) != NULL) {
+-			if ((chainfile = strdup(chainfile)) == NULL)
+-				err(EXIT_FAILURE, "strdup");
+-		} else
+-			err(EXIT_FAILURE, "basename");
++		chainfile = xbasename(domain->chain);
+ 	}
+ 
+ 	if(domain->fullchain != NULL) {
+-		if ((fullchainfile = basename(domain->fullchain)) != NULL) {
+-			if ((fullchainfile = strdup(fullchainfile)) == NULL)
+-				err(EXIT_FAILURE, "strdup");
+-		} else
+-			err(EXIT_FAILURE, "basename");
++		fullchainfile = xbasename(domain->fullchain);
+ 	}
+ 
+ 	if ((auth = domain->auth) == NULL) {
