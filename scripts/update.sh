@@ -75,9 +75,6 @@ for i in *.[chy] ; do
 	mv "$srcdir"/$i.tmp "$srcdir"/$i
 done
 
-# install our own glue
-cp compat/* .
-
 # patch
 for i in patches/*.patch ; do
 	patch -p0 < $i
