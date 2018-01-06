@@ -10,56 +10,62 @@ upstream=anoncvs@anoncvs.ca.openbsd.org:/cvs
 openssh=https://github.com/openssh/openssh-portable.git
 acarchive=git://git.sv.gnu.org/autoconf-archive.git
 
-obsd=/tmp/openbsd
-if ! [ -e "$obsd" ] ; then
-	mkdir "$obsd"
-	cd "$obsd"
+tmpdir=$(mktemp -d)
+echo "Staging update in $tmpdir..."
+
+obsd="$(mktemp -d)"
+echo "Checking out OpenBSD to $obsd..."
+( cd "$obsd" &&
 	cvs -qd "$upstream" checkout -P \
 		src/etc/acme-client.conf \
 		src/usr.sbin/acme-client \
-		src/sys/sys/pledge.h
-	find "$obsd" -name CVS -prune -exec rm -rf {} \;
-	cd "$srcdir"
-fi
+		src/sys/sys/pledge.h )
+find "$obsd" -name CVS -prune -exec rm -rf {} \;
 
 # copy over the source
-cp "$obsd"/src/etc/acme-client.conf "$srcdir"
-cp "$obsd"/src/usr.sbin/acme-client/* "$srcdir"
+cp "$obsd"/src/etc/acme-client.conf "$tmpdir"
+cp "$obsd"/src/usr.sbin/acme-client/* "$tmpdir"
 
 # sys/cdefs.h seems unnecessary and is not provided by musl
 sed -e "/include.*sys\/cdefs\.h/d" \
-	"$obsd"/src/sys/sys/pledge.h > "$srcdir"/bsd-sys-pledge.h
+	"$obsd"/src/sys/sys/pledge.h > "$tmpdir"/bsd-sys-pledge.h
 
-os=/tmp/openssh
-[ -e "$os" ] || \
-	git clone --depth=1 "$openssh" "$os"
+# done with OpenBSD
+rm -rf "$obsd"
+
+os="$(mktemp -d)"
+echo "Checking out OpenSSH to $os..."
+git clone --depth=1 "$openssh" "$os"
 
 # get some BSD functions that aren't typically available on non-BSD systems
 sed "/include.*base64\.h/s/base64\.h/b64_ntop.h/" \
-	"$os"/openbsd-compat/base64.c > "$srcdir"/b64_ntop.c
+	"$os"/openbsd-compat/base64.c > "$tmpdir"/b64_ntop.c
 # uses types from sys/types
 sed "/include.*includes\.h/a\\
 #include <sys/types.h>\\
 " \
-	"$os"/openbsd-compat/base64.h > "$srcdir"/b64_ntop.h
+	"$os"/openbsd-compat/base64.h > "$tmpdir"/b64_ntop.h
 sed -e "s/error(/warnx(/" \
 	-e '/include.*log\.h/s/log\.h/err.h/' \
 	-e "/include.*sys\/types\.h/a\\
 #include <errno.h>" \
-	"$os"/openbsd-compat/bsd-setres_id.c > "$srcdir"/bsd-setres_id.c
-cp "$os"/openbsd-compat/sys-queue.h "$srcdir"/bsd-sys-queue.h
+	"$os"/openbsd-compat/bsd-setres_id.c > "$tmpdir"/bsd-setres_id.c
+cp "$os"/openbsd-compat/sys-queue.h "$tmpdir"/bsd-sys-queue.h
 
 for i in bsd-asprintf.c bsd-setres_id.h \
 		strtonum.c strlcat.c strlcpy.c \
 		reallocarray.c recallocarray.c \
 		explicit_bzero.c ; do
-	cp "$os"/openbsd-compat/$i "$srcdir"
+	cp "$os"/openbsd-compat/$i "$tmpdir"
 done
+
+# done with OpenSSH
+rm -rf "$os"
 
 # make openssh bits include our config.h instead of their includes.h
 # redirect some includes to augmented ones with additional definitions
 # have all files source config.h if not already present
-for i in *.[chy] ; do
+for i in "$tmpdir"/*.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
 		-e 's,<string\.h>,"bsd-string.h",g' \
 		-e 's,<strings\.h>,"bsd-strings.h",g' \
@@ -68,16 +74,17 @@ for i in *.[chy] ; do
 		-e 's,<resolv\.h>,"bsd-resolv.h",g' \
 		-e 's,<sys/queue\.h>,"bsd-sys-queue.h",g' \
 		-e "/include.*includes\.h/s/includes\.h/config.h/" \
-		"$srcdir"/$i | \
+		$i | \
 	awk '/^#include.*\"config\.h\"/ { x=1 }
 		/^#include/ && !x { print "#include \"config.h\""  ; x=1 } 1' \
-		 > "$srcdir"/$i.tmp
-	mv "$srcdir"/$i.tmp "$srcdir"/$i
+		 > $i.tmp
+	mv $i.tmp $i
 done
 
 # patch
-for i in patches/*.patch ; do
-	patch -p0 < $i
+for i in "$srcdir"/patches/*.patch ; do
+	( cd "$tmpdir" &&
+		patch -p0 --no-backup-if-mismatch < $i )
 done
 
 # turn Makefile into an automake template
@@ -88,8 +95,12 @@ sed -e "/include <bsd.prog.mk>/d" \
 	-e "s/^PROG/bin_PROGRAMS /" \
 	-e "s/^SRCS/acme_client_SOURCES /" \
 	-e "s/^MAN/dist_man_MANS /" \
-	Makefile > Makefile.am
-rm -f Makefile
+	"$tmpdir"/Makefile > "$tmpdir"/Makefile.am
+rm -f "$tmpdir"/Makefile
+
+# done staging
+mv "$tmpdir"/* .
+rm -rf "$tmpdir"
 
 cat <<EOF >> Makefile.am
 acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
