@@ -1,0 +1,18 @@
+--- extern.h.orig	2018-01-06 21:04:54.000000000 +0100
++++ extern.h	2018-01-06 21:05:01.000000000 +0100
+@@ -170,8 +170,6 @@
+ 
+ struct	jsmnn;
+ 
+-__BEGIN_DECLS
+-
+ /*
+  * Start with our components.
+  * These are all isolated and talk to each other using sockets.
+@@ -255,6 +253,4 @@
+  */
+ void 		 setcompname(enum comp);
+ 
+-__END_DECLS
+-
+ #endif /* ! EXTERN_H */

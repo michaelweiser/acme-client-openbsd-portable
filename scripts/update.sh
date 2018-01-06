@@ -25,7 +25,10 @@ fi
 # copy over the source
 cp "$obsd"/src/etc/acme-client.conf "$srcdir"
 cp "$obsd"/src/usr.sbin/acme-client/* "$srcdir"
-cp "$obsd"/src/sys/sys/pledge.h "$srcdir"/bsd-sys-pledge.h
+
+# sys/cdefs.h seems unnecessary and is not provided by musl
+sed -e "/include.*sys\/cdefs\.h/d" \
+	"$obsd"/src/sys/sys/pledge.h > "$srcdir"/bsd-sys-pledge.h
 
 os=/tmp/openssh
 [ -e "$os" ] || \
@@ -33,34 +36,29 @@ os=/tmp/openssh
 
 # get some BSD functions that aren't typically available on non-BSD systems
 sed "/include.*base64\.h/s/base64\.h/b64_ntop.h/" \
-	"$os"/openbsd-compat/base64.c > b64_ntop.c
-cp "$os"/openbsd-compat/base64.h b64_ntop.h
+	"$os"/openbsd-compat/base64.c > "$srcdir"/b64_ntop.c
+# uses types from sys/types
+sed "/include.*includes\.h/a\\
+#include <sys/types.h>\\
+" \
+	"$os"/openbsd-compat/base64.h > "$srcdir"/b64_ntop.h
 sed -e "s/error(/warnx(/" \
 	-e '/include.*log\.h/s/log\.h/err.h/' \
 	-e "/include.*sys\/types\.h/a\\
 #include <errno.h>" \
-	"$os"/openbsd-compat/bsd-setres_id.c > bsd-setres_id.c
-cp "$os"/openbsd-compat/sys-queue.h bsd-sys-queue.h
+	"$os"/openbsd-compat/bsd-setres_id.c > "$srcdir"/bsd-setres_id.c
+cp "$os"/openbsd-compat/sys-queue.h "$srcdir"/bsd-sys-queue.h
 
 for i in bsd-asprintf.c bsd-setres_id.h \
 		strtonum.c strlcat.c strlcpy.c \
 		reallocarray.c recallocarray.c \
 		explicit_bzero.c ; do
-	cp "$os"/openbsd-compat/$i .
+	cp "$os"/openbsd-compat/$i "$srcdir"
 done
 
-# make openssh bits include our config.h instead of theis includes.h
-for i in b64_ntop.[ch] \
-		bsd-asprintf.c bsd-setres_id.c \
-		strtonum.c strlcat.c strlcpy.c \
-		reallocarray.c recallocarray.c \
-		explicit_bzero.c ; do
-	sed -e "/include.*includes\.h/s/includes\.h/config.h/" \
-		$i > $i.tmp
-	mv $i.tmp $i
-done
-
+# make openssh bits include our config.h instead of their includes.h
 # redirect some includes to augmented ones with additional definitions
+# have all files source config.h if not already present
 for i in *.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
 		-e 's,<string\.h>,"bsd-string.h",g' \
@@ -69,16 +67,12 @@ for i in *.[chy] ; do
 		-e 's,<stdarg\.h>,"bsd-stdarg.h",g' \
 		-e 's,<resolv\.h>,"bsd-resolv.h",g' \
 		-e 's,<sys/queue\.h>,"bsd-sys-queue.h",g' \
-		$i > $i.tmp
-	mv $i.tmp $i
-done
-
-# have all files source config.h if not already present
-for i in *.[chy] ; do
+		-e "/include.*includes\.h/s/includes\.h/config.h/" \
+		"$srcdir"/$i | \
 	awk '/^#include.*\"config\.h\"/ { x=1 }
 		/^#include/ && !x { print "#include \"config.h\""  ; x=1 } 1' \
-			$i > $i.tmp
-	mv $i.tmp $i
+		 > "$srcdir"/$i.tmp
+	mv "$srcdir"/$i.tmp "$srcdir"/$i
 done
 
 # install our own glue
