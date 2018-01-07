@@ -198,8 +198,8 @@ struct {
 	/* /etc/localtime, zoneinfo */
 	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
-	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
-		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD),
+	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "openat", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, AT_FDCWD), /* glibc 2.26+ */
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 
 	/* dns: resolver, inet: ACME */
@@ -249,7 +249,7 @@ struct {
 		{ SCMP_A1(SCMP_CMP_EQ, FIONREAD) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "recvfrom", 0 },
 
-	/* ld.so.conf */
+	/* /etc/ld.so.nohwcap */
 	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "access", 0 },
 
 	/* nscd unix domain socket */
@@ -258,15 +258,13 @@ struct {
 		  SCMP_A1(SCMP_CMP_MASKED_EQ, SOCK_STREAM, SOCK_STREAM) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "connect", 1,
 		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_un)) } },
+	{ PLEDGE_INET, SCMP_ACT_ERRNO(ECONNREFUSED), "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_un)) } },
 
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "fcntl", 2, /* /etc/hosts */
 		{ SCMP_A1(SCMP_CMP_EQ, F_SETFD),
 		  SCMP_A2(SCMP_CMP_EQ, FD_CLOEXEC) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "stat", 0 }, /* /etc/resolv.conf */
-
-	/* nscd unix domain socket */
-	{ PLEDGE_INET, SCMP_ACT_ERRNO(ECONNREFUSED), "connect", 1,
-		{ SCMP_A2(SCMP_CMP_EQ, sizeof(struct sockaddr_un)) } },
 
 	/* AF_NETLINK getaddrinfo */
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "socket", 3,
@@ -423,7 +421,7 @@ pledge(const char *p_req, const char *ep_req)
 	chroot_droppriv(promises);
 
 #ifdef HAVE_LIBSECCOMP
-	/* seccomp restrictions, does not return on error*/
+	/* seccomp restrictions, does not return on error */
 	seccomp_filter(promises);
 #endif
 
