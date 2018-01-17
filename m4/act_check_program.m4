@@ -12,4 +12,6 @@ AC_DEFUN([ACT_CHECK_PROGRAM],
 			[AS_VAR_SET([ac_Have], [no])])])
 	AS_VAR_COPY([ac_res], [ac_Have])
 	AS_IF([test "$ac_res" = yes],
-		[AC_DEFINE_UNQUOTED(AS_TR_CPP([HAVE_]$1))])])
+		[AC_DEFINE_UNQUOTED(AS_TR_CPP([HAVE_]$1))
+		$4],
+		[$5])])

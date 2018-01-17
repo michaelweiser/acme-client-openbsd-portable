@@ -100,7 +100,7 @@ static const struct {
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
-void chroot_droppriv(uint64_t promises) {
+static void chroot_droppriv(uint64_t promises) {
 	uid_t uid;
 	gid_t gid;
 	struct passwd *pwent;
@@ -145,7 +145,7 @@ void chroot_droppriv(uint64_t promises) {
 }
 
 #ifdef HAVE_LIBSECCOMP
-struct {
+static struct {
 	const uint64_t promises;
 	const uint32_t action;
 	const char *syscall;
@@ -299,7 +299,7 @@ seccomp_violation(int signum, siginfo_t *info, void *ctx)
 	errx(EXIT_FAILURE, "seccomp, syscall: %d", info->si_syscall);
 }
 
-void seccomp_filter(uint64_t promises) {
+static void sandbox(uint64_t promises) {
 	struct sigaction act;
 	sigset_t mask;
 	scmp_filter_ctx ctx;
@@ -355,8 +355,83 @@ void seccomp_filter(uint64_t promises) {
 }
 #endif
 
+#ifdef HAVE_LIBSANDBOX
+/* do not use sandbox.h because it'll spew deprecation warnings */
+extern int sandbox_init(const char *, uint64_t, char **);
+extern void sandbox_free_error(char *);
+
+static struct {
+	const uint64_t promises;
+	const char *profile;
+} sb_profiles[] = {
+	{ PLEDGE_ALWAYS,
+		"(version 1)"
+		"(deny default)" },
+
+	{ PLEDGE_STDIO, ""
+	},
+
+	{ PLEDGE_WPATH, ""
+	},
+
+	{ PLEDGE_RPATH, ""
+	},
+
+	{ PLEDGE_DNS, ""
+	},
+
+	{ PLEDGE_INET, ""
+	},
+
+	{ PLEDGE_CPATH, ""
+	},
+};
+
+static void sandbox(uint64_t promises) {
+	char *se = NULL;
+	char *profile = NULL;
+	size_t plen = 0;
+	int i;
+
+	/* specifically ignore the first pledge call from netproc because it
+	 * still needs to read stuff and will get back to us after */
+	if (promises == (PLEDGE_STDIO | PLEDGE_INET | PLEDGE_RPATH))
+		return;
+
+	/* somewhat inefficient but we do it only once */
+	if ((profile = malloc(1)) == NULL)
+		err(EXIT_FAILURE, "malloc");
+
+	profile[0] = '\0';
+	for (i = 0; i < nitems(sb_profiles); i++) {
+		if ((sb_profiles[i].promises & promises) == 0)
+			continue;
+
+		plen += strlen(sb_profiles[i].profile);
+		if ((profile = realloc(profile, plen + 1)) == NULL)
+			err(EXIT_FAILURE, "realloc");
+
+		strcat(profile, sb_profiles[i].profile);
+	}
+
+	/* they've deprecated it but all the system deamons still use it in
+	 * seemingly the same way. So it might stay around for a while. */
+	if (sandbox_init(profile, 0, &se) != 0) {
+		warn("sandbox_init: %s", se);
+		goto sandbox_fail;
+	}
+
+sandbox_fail:
+	if (se)
+		sandbox_free_error(se);
+	if (profile)
+		free(profile);
+	exit(EXIT_FAILURE);
+}
+#endif
+
 /* bsearch over pledgereq. return flags value if found, 0 else */
-uint64_t
+static uint64_t
 pledgereq_flags(const char *req_name)
 {
 	int base = 0, cmp, i, lim;
@@ -374,7 +449,7 @@ pledgereq_flags(const char *req_name)
 	return (0);
 }
 
-int
+static int
 parsepledges(const char *promises, u_int64_t *fp)
 {
 	char *rbuf, *rp, *pn;
@@ -420,9 +495,9 @@ pledge(const char *p_req, const char *ep_req)
 	/* portable chroot() and setuid(), does not return on error */
 	chroot_droppriv(promises);
 
-#ifdef HAVE_LIBSECCOMP
-	/* seccomp restrictions, does not return on error */
-	seccomp_filter(promises);
+#if defined(HAVE_LIBSECCOMP) || defined(HAVE_LIBSANDBOX)
+	/* does not return on error */
+	sandbox(promises);
 #endif
 
 	return 0;

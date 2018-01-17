@@ -28,3 +28,8 @@ AC_ARG_WITH([seccomp],
 		[enable seccomp syscall filtering @<:@default=check@:>@])],
 		[],
 		[with_seccomp=check])
+AC_ARG_WITH([seatbelt],
+	[AS_HELP_STRING([--with-seatbelt],
+		[enable macOS seatbelt sandboxing @<:@default=check@:>@])],
+		[],
+		[with_seatbelt=check])
