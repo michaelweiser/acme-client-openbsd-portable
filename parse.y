@@ -1,4 +1,4 @@
-/*	$OpenBSD: parse.y,v 1.19 2017/11/27 01:58:52 florian Exp $ */
+/*	$OpenBSD: parse.y,v 1.25 2018/07/11 07:39:22 krw Exp $ */
 
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -44,6 +44,10 @@ static struct file {
 	TAILQ_ENTRY(file)	 entry;
 	FILE			*stream;
 	char			*name;
+	size_t			 ungetpos;
+	size_t			 ungetsize;
+	u_char			*ungetbuf;
+	int			 eof_reached;
 	int			 lineno;
 	int			 errors;
 } *file, *topfile;
@@ -56,8 +60,9 @@ int		 yyerror(const char *, ...)
     __attribute__((__nonnull__ (1)));
 int		 kw_cmp(const void *, const void *);
 int		 lookup(char *);
+int		 igetc(void);
 int		 lgetc(int);
-int		 lungetc(int);
+void		 lungetc(int);
 int		 findeol(void);
 
 struct authority_c	*conf_new_authority(struct acme_conf *, char *);
@@ -93,7 +98,7 @@ typedef struct {
 
 %}
 
-%token	AUTHORITY AGREEMENT URL API ACCOUNT
+%token	AUTHORITY URL API ACCOUNT
 %token	DOMAIN ALTERNATIVE NAMES CERT FULL CHAIN KEY SIGN WITH CHALLENGEDIR
 %token	YES NO
 %token	INCLUDE
@@ -149,6 +154,8 @@ varset		: STRING '=' string		{
 				if (isspace((unsigned char)*s)) {
 					yyerror("macro name cannot contain "
 					    "whitespace");
+					free($1);
+					free($3);
 					YYERROR;
 				}
 			}
@@ -189,11 +196,7 @@ authorityopts_l	: authorityopts_l authorityoptsl nl
 		| authorityoptsl optnl
 		;
 
-authorityoptsl	: AGREEMENT URL STRING {
-			warnx("\"agreement url\" is deprecated.");
-			/* XXX remove after 6.3 */
-		}
-		| API URL STRING {
+authorityoptsl	: API URL STRING {
 			char *s;
 			if (auth->api != NULL) {
 				yyerror("duplicate api");
@@ -409,7 +412,6 @@ lookup(char *s)
 	/* this has to be sorted always */
 	static const struct keywords keywords[] = {
 		{"account",		ACCOUNT},
-		{"agreement",		AGREEMENT},
 		{"alternative",		ALTERNATIVE},
 		{"api",			API},
 		{"authority",		AUTHORITY},
@@ -436,34 +438,39 @@ lookup(char *s)
 		return (STRING);
 }
 
-#define MAXPUSHBACK	128
+#define	START_EXPAND	1
+#define	DONE_EXPAND	2
 
-char	*parsebuf;
-int	 parseindex;
-u_char	 pushback_buffer[MAXPUSHBACK];
-int	 pushback_index = 0;
+static int	expanding;
+
+int
+igetc(void)
+{
+	int	c;
+
+	while (1) {
+		if (file->ungetpos > 0)
+			c = file->ungetbuf[--file->ungetpos];
+		else
+			c = getc(file->stream);
+
+		if (c == START_EXPAND)
+			expanding = 1;
+		else if (c == DONE_EXPAND)
+			expanding = 0;
+		else
+			break;
+	}
+	return (c);
+}
 
 int
 lgetc(int quotec)
 {
 	int		c, next;
 
-	if (parsebuf) {
-		/* Read character from the parsebuffer instead of input. */
-		if (parseindex >= 0) {
-			c = parsebuf[parseindex++];
-			if (c != '\0')
-				return (c);
-			parsebuf = NULL;
-		} else
-			parseindex++;
-	}
-
-	if (pushback_index)
-		return (pushback_buffer[--pushback_index]);
-
 	if (quotec) {
-		if ((c = getc(file->stream)) == EOF) {
+		if ((c = igetc()) == EOF) {
 			yyerror("reached end of file while parsing "
 			    "quoted string");
 			if (file == topfile || popfile() == EOF)
@@ -473,8 +480,8 @@ lgetc(int quotec)
 		return (c);
 	}
 
-	while ((c = getc(file->stream)) == '\\') {
-		next = getc(file->stream);
+	while ((c = igetc()) == '\\') {
+		next = igetc();
 		if (next != '\n') {
 			c = next;
 			break;
@@ -483,28 +490,39 @@ lgetc(int quotec)
 		file->lineno++;
 	}
 
-	while (c == EOF) {
-		if (file == topfile || popfile() == EOF)
-			return (EOF);
-		c = getc(file->stream);
+	if (c == EOF) {
+		/*
+		 * Fake EOL when hit EOF for the first time. This gets line
+		 * count right if last line in included file is syntactically
+		 * invalid and has no newline.
+		 */
+		if (file->eof_reached == 0) {
+			file->eof_reached = 1;
+			return ('\n');
+		}
+		while (c == EOF) {
+			if (file == topfile || popfile() == EOF)
+				return (EOF);
+			c = igetc();
+		}
 	}
 	return (c);
 }
 
-int
+void
 lungetc(int c)
 {
 	if (c == EOF)
-		return (EOF);
-	if (parsebuf) {
-		parseindex--;
-		if (parseindex >= 0)
-			return (c);
+		return;
+
+	if (file->ungetpos >= file->ungetsize) {
+		void *p = reallocarray(file->ungetbuf, file->ungetsize, 2);
+		if (p == NULL)
+			err(1, "%s", __func__);
+		file->ungetbuf = p;
+		file->ungetsize *= 2;
 	}
-	if (pushback_index < MAXPUSHBACK-1)
-		return (pushback_buffer[pushback_index++] = c);
-	else
-		return (EOF);
+	file->ungetbuf[file->ungetpos++] = c;
 }
 
 int
@@ -512,14 +530,9 @@ findeol(void)
 {
 	int	c;
 
-	parsebuf = NULL;
-
 	/* skip to either EOF or the first real EOL */
 	while (1) {
-		if (pushback_index)
-			c = pushback_buffer[--pushback_index];
-		else
-			c = lgetc(0);
+		c = lgetc(0);
 		if (c == '\n') {
 			file->lineno++;
 			break;
@@ -547,7 +560,7 @@ top:
 	if (c == '#')
 		while ((c = lgetc(0)) != '\n' && c != EOF)
 			; /* nothing */
-	if (c == '$' && parsebuf == NULL) {
+	if (c == '$' && !expanding) {
 		while (1) {
 			if ((c = lgetc(0)) == EOF)
 				return (0);
@@ -569,8 +582,13 @@ top:
 			yyerror("macro '%s' not defined", buf);
 			return (findeol());
 		}
-		parsebuf = val;
-		parseindex = 0;
+		p = val + strlen(val) - 1;
+		lungetc(DONE_EXPAND);
+		while (p >= val) {
+			lungetc(*p);
+			p--;
+		}
+		lungetc(START_EXPAND);
 		goto top;
 	}
 
@@ -609,7 +627,7 @@ top:
 		}
 		yylval.v.string = strdup(buf);
 		if (yylval.v.string == NULL)
-			err(EXIT_FAILURE, "yylex: strdup");
+			err(EXIT_FAILURE, "%s", __func__);
 		return (STRING);
 	}
 
@@ -667,7 +685,7 @@ nodigits:
 		*p = '\0';
 		if ((token = lookup(buf)) == STRING) {
 			if ((yylval.v.string = strdup(buf)) == NULL)
-				err(EXIT_FAILURE, "yylex: strdup");
+				err(EXIT_FAILURE, "%s", __func__);
 		}
 		return (token);
 	}
@@ -686,21 +704,30 @@ pushfile(const char *name)
 	struct file	*nfile;
 
 	if ((nfile = calloc(1, sizeof(struct file))) == NULL) {
-		warn("malloc");
+		warn("%s", __func__);
 		return (NULL);
 	}
 	if ((nfile->name = strdup(name)) == NULL) {
-		warn("strdup");
+		warn("%s", __func__);
 		free(nfile);
 		return (NULL);
 	}
 	if ((nfile->stream = fopen(nfile->name, "r")) == NULL) {
-		warn("%s", nfile->name);
+		warn("%s: %s", __func__, nfile->name);
 		free(nfile->name);
 		free(nfile);
 		return (NULL);
 	}
-	nfile->lineno = 1;
+	nfile->lineno = TAILQ_EMPTY(&files) ? 1 : 0;
+	nfile->ungetsize = 16;
+	nfile->ungetbuf = malloc(nfile->ungetsize);
+	if (nfile->ungetbuf == NULL) {
+		warn("%s", __func__);
+		fclose(nfile->stream);
+		free(nfile->name);
+		free(nfile);
+		return (NULL);
+	}
 	TAILQ_INSERT_TAIL(&files, nfile, entry);
 	return (nfile);
 }
@@ -716,6 +743,7 @@ popfile(void)
 	TAILQ_REMOVE(&files, file, entry);
 	fclose(file->stream);
 	free(file->name);
+	free(file->ungetbuf);
 	free(file);
 	file = prev;
 	return (file ? 0 : EOF);
@@ -727,7 +755,7 @@ parse_config(const char *filename, int opts)
 	struct sym	*sym, *next;
 
 	if ((conf = calloc(1, sizeof(struct acme_conf))) == NULL)
-		err(EXIT_FAILURE, "parse_config");
+		err(EXIT_FAILURE, "%s", __func__);
 	conf->opts = opts;
 
 	if ((file = pushfile(filename)) == NULL) {
@@ -852,7 +880,7 @@ conf_new_authority(struct acme_conf *c, char *s)
 	if (a)
 		return (NULL);
 	if ((a = calloc(1, sizeof(struct authority_c))) == NULL)
-		err(EXIT_FAILURE, "calloc");
+		err(EXIT_FAILURE, "%s", __func__);
 	TAILQ_INSERT_TAIL(&c->authority_list, a, entry);
 
 	a->name = s;
@@ -887,7 +915,7 @@ conf_new_domain(struct acme_conf *c, char *s)
 	if (d)
 		return (NULL);
 	if ((d = calloc(1, sizeof(struct domain_c))) == NULL)
-		err(EXIT_FAILURE, "calloc");
+		err(EXIT_FAILURE, "%s", __func__);
 	TAILQ_INSERT_TAIL(&c->domain_list, d, entry);
 
 	d->domain = s;
@@ -921,7 +949,7 @@ conf_new_keyfile(struct acme_conf *c, char *s)
 	}
 
 	if ((k = calloc(1, sizeof(struct keyfile))) == NULL)
-		err(EXIT_FAILURE, "calloc");
+		err(EXIT_FAILURE, "%s", __func__);
 	LIST_INSERT_HEAD(&c->used_key_list, k, entry);
 
 	k->name = s;
