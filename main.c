@@ -1,4 +1,4 @@
-/*	$Id: main.c,v 1.36 2017/11/27 01:58:52 florian Exp $ */
+/*	$Id: main.c,v 1.42 2019/01/29 16:38:29 benno Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -83,20 +83,23 @@ main(int argc, char *argv[])
 	struct domain_c		*domain = NULL;
 	struct altname_c	*ac;
 
-	while ((c = getopt(argc, argv, "FADrvnf:")) != -1)
+	while ((c = getopt(argc, argv, "ADFnrvf:")) != -1)
 		switch (c) {
-		case 'f':
-			if ((conffile = strdup(optarg)) == NULL)
-				err(EXIT_FAILURE, "strdup");
-			break;
-		case 'F':
-			force = 1;
-			break;
 		case 'A':
 			popts |= ACME_OPT_NEWACCT;
 			break;
 		case 'D':
 			popts |= ACME_OPT_NEWDKEY;
+			break;
+		case 'F':
+			force = 1;
+			break;
+		case 'f':
+			if ((conffile = strdup(optarg)) == NULL)
+				err(EXIT_FAILURE, "strdup");
+			break;
+		case 'n':
+			popts |= ACME_OPT_CHECK;
 			break;
 		case 'r':
 			revocate = 1;
@@ -104,9 +107,6 @@ main(int argc, char *argv[])
 		case 'v':
 			verbose = verbose ? 2 : 1;
 			popts |= ACME_OPT_VERBOSE;
-			break;
-		case 'n':
-			popts |= ACME_OPT_CHECK;
 			break;
 		default:
 			goto usage;
@@ -117,7 +117,7 @@ main(int argc, char *argv[])
 
 	/* parse config file */
 	if ((conf = parse_config(conffile, popts)) == NULL)
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 
 	argc -= optind;
 	argv += optind;
@@ -141,11 +141,11 @@ main(int argc, char *argv[])
 		certfile = xbasename(domain->cert);
 	}
 
-	if(domain->chain != NULL) {
+	if (domain->chain != NULL) {
 		chainfile = xbasename(domain->chain);
 	}
 
-	if(domain->fullchain != NULL) {
+	if (domain->fullchain != NULL) {
 		fullchainfile = xbasename(domain->fullchain);
 	}
 
@@ -162,17 +162,9 @@ main(int argc, char *argv[])
 
 	acctkey = authority->account;
 
-	if (acctkey == NULL) {
-		/* XXX replace with existance check in parse.y */
-		err(EXIT_FAILURE, "no account key in config?");
-	}
-	if (domain->challengedir == NULL)
-		chngdir = strdup(WWW_DIR);
-	else
-		chngdir = domain->challengedir;
-
-	if (chngdir == NULL)
-		err(EXIT_FAILURE, "strdup");
+	if ((chngdir = domain->challengedir) == NULL)
+		if ((chngdir = strdup(WWW_DIR)) == NULL)
+			err(EXIT_FAILURE, "strdup");
 
 	/*
 	 * Do some quick checks to see if our paths exist.
@@ -191,7 +183,8 @@ main(int argc, char *argv[])
 	if (!(popts & ACME_OPT_NEWDKEY) && access(domain->key, R_OK) == -1) {
 		warnx("%s: domain key file must exist", domain->key);
 		ne++;
-	} else if ((popts & ACME_OPT_NEWDKEY) && access(domain->key, R_OK) != -1) {
+	} else if ((popts & ACME_OPT_NEWDKEY) && access(domain->key, R_OK)
+	    != -1) {
 		dodbg("%s: domain key exists (not creating)", domain->key);
 		popts &= ~ACME_OPT_NEWDKEY;
 	}
@@ -210,10 +203,10 @@ main(int argc, char *argv[])
 	}
 
 	if (ne > 0)
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 
 	if (popts & ACME_OPT_CHECK)
-		exit(EXIT_SUCCESS);
+		return EXIT_SUCCESS;
 
 	/* Set the zeroth altname as our domain. */
 	altsz = domain->altname_count + 1;
@@ -410,10 +403,8 @@ main(int argc, char *argv[])
 
 	/* Jail: sandbox, file-system, user. */
 
-	if (pledge("stdio", NULL) == -1) {
-		warn("pledge");
-		exit(EXIT_FAILURE);
-	}
+	if (pledge("stdio", NULL) == -1)
+		err(EXIT_FAILURE, "pledge");
 
 	/*
 	 * Collect our subprocesses.

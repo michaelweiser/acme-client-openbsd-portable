@@ -1,5 +1,5 @@
---- main.c.orig	2018-01-06 00:11:40.237778679 +0000
-+++ main.c	2018-01-06 00:48:07.145973277 +0000
+--- main.c.orig	2019-02-01 21:14:50.000000000 +0100
++++ main.c	2019-02-01 21:14:39.000000000 +0100
 @@ -30,6 +30,36 @@
  #include "extern.h"
  #include "parse.h"
@@ -67,7 +67,7 @@
 +		certfile = xbasename(domain->cert);
  	}
  
- 	if(domain->chain != NULL) {
+ 	if (domain->chain != NULL) {
 -		if ((chainfile = basename(domain->chain)) != NULL) {
 -			if ((chainfile = strdup(chainfile)) == NULL)
 -				err(EXIT_FAILURE, "strdup");
@@ -76,7 +76,7 @@
 +		chainfile = xbasename(domain->chain);
  	}
  
- 	if(domain->fullchain != NULL) {
+ 	if (domain->fullchain != NULL) {
 -		if ((fullchainfile = basename(domain->fullchain)) != NULL) {
 -			if ((fullchainfile = strdup(fullchainfile)) == NULL)
 -				err(EXIT_FAILURE, "strdup");

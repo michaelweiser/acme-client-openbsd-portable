@@ -17,13 +17,13 @@ obsd="$(mktemp -d)"
 echo "Checking out OpenBSD to $obsd..."
 ( cd "$obsd" &&
 	cvs -qd "$upstream" checkout -P \
-		src/etc/acme-client.conf \
+		src/etc/examples/acme-client.conf \
 		src/usr.sbin/acme-client \
 		src/sys/sys/pledge.h )
 find "$obsd" -name CVS -prune -exec rm -rf {} \;
 
 # copy over the source
-cp "$obsd"/src/etc/acme-client.conf "$tmpdir"
+cp "$obsd"/src/etc/examples/acme-client.conf "$tmpdir"
 cp "$obsd"/src/usr.sbin/acme-client/* "$tmpdir"
 
 # sys/cdefs.h seems unnecessary and is not provided by musl
@@ -62,9 +62,9 @@ done
 # done with OpenSSH
 rm -rf "$os"
 
-# make openssh bits include our config.h instead of their includes.h
-# redirect some includes to augmented ones with additional definitions
-# have all files source config.h if not already present
+# make openssh bits include our config.h instead of their includes.h.
+# Redirect some includes to augmented ones with additional definitions.
+# Have all files source config.h if not already present.
 for i in "$tmpdir"/*.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
 		-e 's,<string\.h>,"bsd-string.h",g' \
@@ -73,6 +73,7 @@ for i in "$tmpdir"/*.[chy] ; do
 		-e 's,<stdarg\.h>,"bsd-stdarg.h",g' \
 		-e 's,<resolv\.h>,"bsd-resolv.h",g' \
 		-e 's,<sys/queue\.h>,"bsd-sys-queue.h",g' \
+		-e 's,<tls.h>,"libressl-tls.h",g' \
 		-e "/include.*includes\.h/s/includes\.h/config.h/" \
 		$i | \
 	awk '/^#include.*\"config\.h\"/ { x=1 }

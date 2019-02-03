@@ -1,4 +1,4 @@
-/*	$Id: http.c,v 1.21 2018/02/06 04:19:56 florian Exp $ */
+/*	$Id: http.c,v 1.24 2018/11/29 14:25:07 tedu Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include "bsd-stdlib.h"
 #include "bsd-string.h"
-#include <tls.h>
+#include "libressl-tls.h"
 #include "bsd-unistd.h"
 
 #include "http.h"
@@ -136,7 +136,7 @@ http_init()
 		goto err;
 	}
 
-	if (tls_config_set_ca_file(tlscfg, DEFAULT_CA_FILE) == -1) {
+	if (tls_config_set_ca_file(tlscfg, tls_default_ca_cert_file()) == -1) {
 		warn("tls_config_set_ca_file: %s", tls_config_error(tlscfg));
 		goto err;
 	}

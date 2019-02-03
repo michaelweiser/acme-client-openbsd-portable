@@ -10,14 +10,3 @@
  int
  main(int argc, char *argv[])
  {
---- http.c.orig	2018-01-04 23:27:19.000000000 +0100
-+++ http.c	2018-01-04 23:27:28.000000000 +0100
-@@ -36,8 +36,6 @@
- #include "http.h"
- #include "extern.h"
- 
--#define DEFAULT_CA_FILE "/etc/ssl/cert.pem"
--
- /*
-  * A buffer for transferring HTTP/S data.
-  */

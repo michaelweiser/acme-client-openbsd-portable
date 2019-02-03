@@ -55,7 +55,7 @@ AS_IF([test "x$ac_cv_func_setresgid" = xno], [AC_LIBOBJ([bsd-setres_id])])
 # fails. Other variants leave it in undefined state which the OpenBSD
 # source may not expect.
 AC_LIBOBJ([bsd-asprintf])
-AC_REPLACE_FUNCS([pledge reallocarray recallocarray strtonum strlcat strlcpy])
+AC_REPLACE_FUNCS([pledge reallocarray recallocarray strtonum strlcat strlcpy unveil])
 
 ACT_SEARCH_LIBS_HAVE([__b64_ntop],
 	[[#include <resolv.h>]],

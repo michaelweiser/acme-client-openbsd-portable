@@ -1,4 +1,4 @@
-/*	$Id: netproc.c,v 1.16 2018/03/14 12:28:25 florian Exp $ */
+/*	$Id: netproc.c,v 1.22 2019/02/01 10:16:04 benno Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -23,6 +23,7 @@
 #include "bsd-stdlib.h"
 #include "bsd-string.h"
 #include "bsd-unistd.h"
+#include "libressl-tls.h"
 
 #include "http.h"
 #include "extern.h"
@@ -94,7 +95,6 @@ url2host(const char *host, short *port, char **path)
 	char	*url, *ep;
 
 	/* We only understand HTTP and HTTPS. */
-
 	if (strncmp(host, "https://", 8) == 0) {
 		*port = 443;
 		if ((url = strdup(host + 8)) == NULL) {
@@ -113,7 +113,6 @@ url2host(const char *host, short *port, char **path)
 	}
 
 	/* Terminate path part. */
-
 	if ((ep = strchr(url, '/')) != NULL) {
 		*path = strdup(ep);
 		*ep = '\0';
@@ -238,7 +237,6 @@ again:
 	}
 
 	/* Copy the body part into our buffer. */
-
 	free(c->buf.buf);
 	c->buf.sz = g->bodypartsz;
 	c->buf.buf = malloc(c->buf.sz);
@@ -298,7 +296,6 @@ sreq(struct conn *c, const char *addr, const char *req)
 	 * Send the nonce and request payload to the acctproc.
 	 * This will create the proper JSON object we need.
 	 */
-
 	if (writeop(c->fd, COMM_ACCT, ACCT_SIGN) <= 0) {
 		free(nonce);
 		return -1;
@@ -312,12 +309,10 @@ sreq(struct conn *c, const char *addr, const char *req)
 	free(nonce);
 
 	/* Now read back the signed payload. */
-
 	if ((reqsn = readstr(c->fd, COMM_REQ)) == NULL)
 		return -1;
 
 	/* Now send the signed payload to the CA. */
-
 	if ((host = url2host(addr, &port, &path)) == NULL) {
 		free(reqsn);
 		return -1;
@@ -337,7 +332,6 @@ sreq(struct conn *c, const char *addr, const char *req)
 		return -1;
 
 	/* Stuff response into parse buffer. */
-
 	code = g->code;
 
 	free(c->buf.buf);
@@ -385,7 +379,7 @@ donewreg(struct conn *c, const struct capaths *p)
 
 /*
  * Request a challenge for the given domain name.
- * This must happen for each name "alt".
+ * This must be called for each name "alt".
  * On non-zero exit, fills in "chng" with the challenge.
  */
 static int
@@ -420,7 +414,7 @@ dochngreq(struct conn *c, const char *alt, struct chng *chng,
 }
 
 /*
- * Note to the CA that a challenge response is in place.
+ * Tell the CA that a challenge response is in place.
  */
 static int
 dochngresp(struct conn *c, const struct chng *chng, const char *th)
@@ -454,7 +448,7 @@ dochngresp(struct conn *c, const struct chng *chng, const char *th)
 static int
 dochngcheck(struct conn *c, struct chng *chng)
 {
-	int		 cc;
+	enum chngstatus	 cc;
 	long		 lc;
 	struct jsmnn	*j;
 
@@ -477,7 +471,7 @@ dochngcheck(struct conn *c, struct chng *chng)
 		json_free(j);
 		return 0;
 	} else if (cc > 0)
-		chng->status = 1;
+		chng->status = CHNG_VALID;
 
 	json_free(j);
 	return 1;
@@ -593,17 +587,16 @@ dofullchain(struct conn *c, const char *addr)
 }
 
 /*
- * Here we communicate with the ACME server.
- * For this, we'll need the certificate we want to upload and our
- * account key information.
+ * Communicate with the ACME server.
+ * We need the certificate we want to upload and our account key information.
  */
 int
 netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
     int newacct, int revocate, struct authority_c *authority,
-    const char *const *alts,size_t altsz)
+    const char *const *alts, size_t altsz)
 {
 	int		 rc = 0;
-	size_t		 i;
+	size_t		 i, done = 0;
 	char		*cert = NULL, *thumb = NULL, *url = NULL;
 	struct conn	 c;
 	struct capaths	 paths;
@@ -612,6 +605,11 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 
 	memset(&paths, 0, sizeof(struct capaths));
 	memset(&c, 0, sizeof(struct conn));
+
+	if (unveil(tls_default_ca_cert_file(), "r") == -1) {
+		warn("unveil");
+		goto out;
+	}
 
 	if (pledge("stdio inet rpath", NULL) == -1) {
 		warn("pledge");
@@ -629,13 +627,11 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	}
 
 	/*
-	 * Wait until the acctproc, keyproc, and revokeproc have started
-	 * up and are ready to serve us data.
-	 * There's no point in running if these don't work.
-	 * Then check whether revokeproc indicates that the certificate
-	 * on file (if any) can be updated.
+	 * Wait until the acctproc, keyproc, and revokeproc have started up and
+	 * are ready to serve us data.
+	 * Then check whether revokeproc indicates that the certificate on file
+	 * (if any) can be updated.
 	 */
-
 	if ((lval = readop(afd, COMM_ACCT_STAT)) == 0) {
 		rc = 1;
 		goto out;
@@ -661,14 +657,12 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	}
 
 	/* If our certificate is up-to-date, return now. */
-
 	if (lval == REVOKE_OK) {
 		rc = 1;
 		goto out;
 	}
 
 	/* Allocate main state. */
-
 	chngs = calloc(altsz, sizeof(struct chng));
 	if (chngs == NULL) {
 		warn("calloc");
@@ -680,9 +674,7 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	c.na = authority->api;
 
 	/*
-	 * Look up the domain of the ACME server.
-	 * We'll use this ourselves instead of having libcurl do the DNS
-	 * resolution itself.
+	 * Look up the API urls of the ACME server.
 	 */
 	if (!dodirs(&c, c.na, &paths))
 		goto out;
@@ -693,7 +685,6 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	 * Following that, submit the request to the CA then notify the
 	 * certproc, which will in turn notify the fileproc.
 	 */
-
 	if (revocate) {
 		if ((cert = readstr(rfd, COMM_CSR)) == NULL)
 			goto out;
@@ -705,12 +696,10 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	}
 
 	/* If new, register with the CA server. */
-
 	if (newacct && ! donewreg(&c, &paths))
 		goto out;
 
 	/* Pre-authorise all domains with CA server. */
-
 	for (i = 0; i < altsz; i++)
 		if (!dochngreq(&c, alts[i], &chngs[i], &paths))
 			goto out;
@@ -721,14 +710,12 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	 * We'll combine this to the challenge to create our response,
 	 * which will be orchestrated by the chngproc.
 	 */
-
 	if (writeop(afd, COMM_ACCT, ACCT_THUMBPRINT) <= 0)
 		goto out;
 	else if ((thumb = readstr(afd, COMM_THUMB)) == NULL)
 		goto out;
 
 	/* We'll now ask chngproc to build the challenge. */
-
 	for (i = 0; i < altsz; i++) {
 		if (writeop(Cfd, COMM_CHNG_OP, CHNG_SYN) <= 0)
 			goto out;
@@ -738,12 +725,10 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 			goto out;
 
 		/* Read that the challenge has been made. */
-
 		if (readop(Cfd, COMM_CHNG_ACK) != CHNG_ACK)
 			goto out;
 
 		/* Write to the CA that it's ready. */
-
 		if (!dochngresp(&c, &chngs[i], thumb))
 			goto out;
 	}
@@ -753,32 +738,40 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	 * Connect to the server (assume it's the same server) once
 	 * every five seconds.
 	 */
+	for (;;) {
+		for (i = 0; i < altsz; i++) {
+			doddbg("%s: done %lu, altsz %lu, i %lu, status %d",
+			    __func__, done, altsz, i, chngs[i].status);
 
-	for (i = 0; i < altsz; i++) {
-		if (chngs[i].status == 1)
-			continue;
+			if (chngs[i].status == CHNG_VALID)
+				continue;
 
-		if (chngs[i].retry++ >= RETRY_MAX) {
-			warnx("%s: too many tries", chngs[i].uri);
-			goto out;
+			if (chngs[i].retry++ >= RETRY_MAX) {
+				warnx("%s: too many tries", chngs[i].uri);
+				goto out;
+			}
+
+			sleep(RETRY_DELAY);
+			if (dochngcheck(&c, &chngs[i])) {
+				if (chngs[i].status == CHNG_VALID)
+					done++;
+				continue;
+			} else
+				goto out;
 		}
 
-		/* Sleep before every attempt. */
-		sleep(RETRY_DELAY);
-		if (!dochngcheck(&c, &chngs[i]))
-			goto out;
+		if (done == altsz)
+			break;
 	}
 
 	/*
 	 * Write our acknowledgement that the challenges are over.
 	 * The challenge process will remove all of the files.
 	 */
-
 	if (writeop(Cfd, COMM_CHNG_OP, CHNG_STOP) <= 0)
 		goto out;
 
 	/* Wait to receive the certificate itself. */
-
 	if ((cert = readstr(kfd, COMM_CERT)) == NULL)
 		goto out;
 
@@ -786,7 +779,6 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	 * Otherwise, submit the CA for signing, download the signed
 	 * copy, and ship that into the certificate process for copying.
 	 */
-
 	if (!docert(&c, paths.newcert, cert))
 		goto out;
 	else if (writeop(cfd, COMM_CSR_OP, CERT_UPDATE) <= 0)
@@ -799,7 +791,6 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	 * Then contact the issuer to get the certificate chain.
 	 * Write this chain directly back to the certproc.
 	 */
-
 	if ((url = readstr(cfd, COMM_ISSUER)) == NULL)
 		goto out;
 	else if (!dofullchain(&c, url))
