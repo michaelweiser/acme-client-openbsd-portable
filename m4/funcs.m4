@@ -87,3 +87,22 @@ AC_DEFINE([HAVE_B64_PTON],[1],[not needed])
 
 # compatibility with older bison (e.g. 2.3 on Darwin)
 AC_DEFINE([YYSTYPE_IS_DECLARED],[1],[old bison])
+
+# check if libtls has tls_default_ca_cert_file and warn if the user wants to
+# override the default CA file while it is in use, provide an alternative
+# implementation otherwise
+act_save_CFLAGS="$CFLAGS"
+act_save_LIBS="$LIBS"
+CFLAGS="$CFLAGS $libtls_CFLAGS"
+LIBS="$LIBS $libtls_LIBS"
+AC_CHECK_FUNCS([tls_default_ca_cert_file],
+	[AS_IF([test "${with_default_ca_file+set}" = set],
+		[AC_MSG_WARN([tls_default_ca_cert_file of libressl is in use.
+	--with-default-ca-file will have no effect.
+	Please configure libressl accordingly instead.])])],
+	[AC_LIBOBJ([tls_default_ca_cert_file])
+	 AS_IF([test "${with_default_ca_file+set}" = set],[],
+		[AC_MSG_NOTICE([Using CA certificate bundle at $defaultcafile.
+	Reconfigure with --with-default-ca-file as necessary.])])])
+CFLAGS="$act_save_CFLAGS"
+LIBS="$act_save_LIBS"
