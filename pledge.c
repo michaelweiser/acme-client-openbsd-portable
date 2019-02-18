@@ -286,6 +286,9 @@ static struct {
 
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "unlink", 0 },
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "rename", 0 },
+
+	/* glibc 2.28+ qsort pagesize libressl */
+	{ PLEDGE_INET, SCMP_ACT_ALLOW, "sysinfo", 0 },
 };
 
 static void
