@@ -72,9 +72,9 @@ static const struct {
 	/*{ "dpath",		PLEDGE_DPATH },
 	{ "drm",		PLEDGE_DRM },
 	{ "error",		PLEDGE_ERROR },
-	{ "exec",		PLEDGE_EXEC },
+	{ "exec",		PLEDGE_EXEC },*/
 	{ "fattr",		PLEDGE_FATTR | PLEDGE_CHOWN },
-	{ "flock",		PLEDGE_FLOCK },
+	/*{ "flock",		PLEDGE_FLOCK },
 	{ "getpw",		PLEDGE_GETPW },
 	{ "id",			PLEDGE_ID },*/
 	{ "inet",		PLEDGE_INET },
