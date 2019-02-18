@@ -49,6 +49,8 @@
 #include <sys/ioctl.h> /* FIONREAD */
 #include <fcntl.h> /* O_RDWR */
 #include <linux/netlink.h> /* sockaddr_nl */
+#include <linux/futex.h> /* FUTEX_WAKE_PRIVATE */
+#include <limits.h> /* LONG_MAX */
 #endif
 
 #include "bsd-sys-pledge.h"
@@ -155,6 +157,10 @@ static struct {
 	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "exit", 0 },
 	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "exit_group", 0 }, /* glibc */
 	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "brk", 0 },
+	/* glibc 2.28+ __pthread_once_slow */
+	{ PLEDGE_ALWAYS, SCMP_ACT_ALLOW, "futex", 2,
+		{ SCMP_A1(SCMP_CMP_EQ, FUTEX_WAKE_PRIVATE),
+		  SCMP_A2(SCMP_CMP_EQ, (uint64_t)INT_MAX) }},
 
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "fstat", 0 },
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "lseek", 0 },
