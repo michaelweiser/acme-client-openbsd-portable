@@ -112,11 +112,11 @@ AM_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
 	-DPRIVSEP_PATH='"\$(privseppath)"' \\
 	-DPRIVSEP_USER='"\$(privsepuser)"' \\
 	-DDEFAULT_CA_FILE='"\$(defaultcafile)"'
-
-dist_sysconf_DATA = acme-client.conf
-acme_client_CFLAGS = \$(WARN_CFLAGS) \\
+	\$(WARN_CFLAGS) \\
 	\$(libtls_CFLAGS) \$(libcrypto_CFLAGS) \\
 	\$(libseccomp_CFLAGS)
+
+dist_sysconf_DATA = acme-client.conf
 acme_client_LDFLAGS = \$(WARN_LDFLAGS)
 acme_client_LDADD = \$(LIBOBJS) \\
 	\$(libtls_LIBS) \$(libcrypto_LIBS) \\

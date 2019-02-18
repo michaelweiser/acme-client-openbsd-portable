@@ -11,16 +11,16 @@ dist_man_MANS =		acme-client.1 acme-client.conf.5
 acme_client_SOURCES += b64_ntop.h bsd-resolv.h bsd-setres_id.h bsd-stdarg.h bsd-stdlib.h bsd-string.h bsd-strings.h bsd-sys-pledge.h bsd-sys-queue.h bsd-unistd.h extern.h http.h jsmn.h libressl-tls.h parse.h rsa.h
 
 # AM_CPPFLAGS so it also applies to LIBOBJS
-AM_CPPFLAGS = -DCONF_FILE='"$(sysconfdir)/acme-client.conf"' \
+AM_CFLAGS = -DCONF_FILE='"$(sysconfdir)/acme-client.conf"' \
 	-DWWW_DIR='"$(wwwdir)"' \
 	-DPRIVSEP_PATH='"$(privseppath)"' \
 	-DPRIVSEP_USER='"$(privsepuser)"' \
-	-DDEFAULT_CA_FILE='"$(defaultcafile)"'
-
-dist_sysconf_DATA = acme-client.conf
-acme_client_CFLAGS = $(WARN_CFLAGS) \
+	-DDEFAULT_CA_FILE='"$(defaultcafile)"' \
+	$(WARN_CFLAGS) \
 	$(libtls_CFLAGS) $(libcrypto_CFLAGS) \
 	$(libseccomp_CFLAGS)
+
+dist_sysconf_DATA = acme-client.conf
 acme_client_LDFLAGS = $(WARN_LDFLAGS)
 acme_client_LDADD = $(LIBOBJS) \
 	$(libtls_LIBS) $(libcrypto_LIBS) \
