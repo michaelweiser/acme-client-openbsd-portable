@@ -215,10 +215,6 @@ static struct {
 		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD), /* glibc 2.26+ */
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
 
-	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "fchmod", 1,
-		{ SCMP_A1(SCMP_CMP_MASKED_EQ, S_IRWXU|S_IRWXG|S_IRWXO,
-					      S_IRUSR|S_IRGRP|S_IROTH) }},
-
 	/* dns: resolver, inet: ACME */
 	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv4 TCP */
 		{ SCMP_A0(SCMP_CMP_EQ, AF_INET),
@@ -300,6 +296,11 @@ static struct {
 
 	/* glibc 2.28+ qsort pagesize libressl */
 	{ PLEDGE_INET, SCMP_ACT_ALLOW, "sysinfo", 0 },
+
+	{ PLEDGE_FATTR, SCMP_ACT_ALLOW, "fchmod", 1,
+		{ SCMP_A1(SCMP_CMP_MASKED_EQ, S_IRWXU|S_IRWXG|S_IRWXO,
+					      S_IRUSR|S_IRGRP|S_IROTH) }},
+
 };
 
 static void
