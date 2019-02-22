@@ -312,6 +312,16 @@ checkexit_ext(int *rc, pid_t pid, enum comp comp)
 	return 1;
 }
 
-void setcompname(enum comp comp) {
+/* Set and get the component name of this process. Set program name as a side
+ * effect so that log messages show the component name for easier
+ * identification. */
+static enum comp	 proccomp = COMP__MAX;
+
+void setcomp(enum comp comp) {
+	proccomp = comp;
 	setprogname(comps[comp]);
+}
+
+enum comp  getcomp(void) {
+	return proccomp;
 }

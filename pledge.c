@@ -320,7 +320,7 @@ seccomp_violation(int signum, siginfo_t *info, void *ctx)
 	errx(EXIT_FAILURE, "seccomp, syscall: %d", info->si_syscall);
 }
 
-static void sandbox(uint64_t promises) {
+static void sandbox(uint64_t promises, const enum comp proccomp) {
 	struct sigaction act;
 	sigset_t mask;
 	scmp_filter_ctx ctx;
@@ -328,7 +328,7 @@ static void sandbox(uint64_t promises) {
 
 	/* specifically ignore the first pledge call from netproc because it
 	 * still needs to read stuff and will get back to us after */
-	if (promises == (PLEDGE_STDIO | PLEDGE_INET | PLEDGE_RPATH))
+	if ((proccomp == COMP_NET) && (promises & PLEDGE_RPATH))
 		return;
 
 	memset(&act, 0, sizeof(act));
@@ -408,7 +408,7 @@ static struct {
 	},
 };
 
-static void sandbox(uint64_t promises) {
+static void sandbox(uint64_t promises, const enum comp proccomp) {
 	char *se = NULL;
 	char *profile = NULL;
 	size_t plen = 0;
@@ -416,7 +416,7 @@ static void sandbox(uint64_t promises) {
 
 	/* specifically ignore the first pledge call from netproc because it
 	 * still needs to read stuff and will get back to us after */
-	if (promises == (PLEDGE_STDIO | PLEDGE_INET | PLEDGE_RPATH))
+	if ((proccomp == COMP_NET) && (promises & PLEDGE_RPATH))
 		return;
 
 	/* somewhat inefficient but we do it only once */
@@ -425,7 +425,8 @@ static void sandbox(uint64_t promises) {
 
 	profile[0] = '\0';
 	for (i = 0; i < nitems(sb_profiles); i++) {
-		if ((sb_profiles[i].promises & promises) == 0)
+		if ((sb_profiles[i].comp != proccomp) &&
+				(sb_profiles[i].comp != COMP__MAX))
 			continue;
 
 		plen += strlen(sb_profiles[i].profile);
@@ -518,7 +519,7 @@ pledge(const char *p_req, const char *ep_req)
 
 #if defined(HAVE_LIBSECCOMP) || defined(HAVE_LIBSANDBOX)
 	/* does not return on error */
-	sandbox(promises);
+	sandbox(promises, getcomp());
 #endif
 
 	return 0;

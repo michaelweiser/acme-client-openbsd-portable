@@ -244,7 +244,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_NET] == 0) {
-		setcompname(COMP_NET);
+		setcomp(COMP_NET);
 		close(key_fds[0]);
 		close(acct_fds[0]);
 		close(chng_fds[0]);
@@ -275,7 +275,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_KEY] == 0) {
-		setcompname(COMP_KEY);
+		setcomp(COMP_KEY);
 		close(cert_fds[0]);
 		close(dns_fds[0]);
 		close(rvk_fds[0]);
@@ -297,7 +297,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_ACCOUNT] == 0) {
-		setcompname(COMP_ACCOUNT);
+		setcomp(COMP_ACCOUNT);
 		free(alts);
 		close(cert_fds[0]);
 		close(dns_fds[0]);
@@ -317,7 +317,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_CHALLENGE] == 0) {
-		setcompname(COMP_CHALLENGE);
+		setcomp(COMP_CHALLENGE);
 		free(alts);
 		close(cert_fds[0]);
 		close(dns_fds[0]);
@@ -336,7 +336,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_CERT] == 0) {
-		setcompname(COMP_CERT);
+		setcomp(COMP_CERT);
 		free(alts);
 		close(dns_fds[0]);
 		close(rvk_fds[0]);
@@ -354,7 +354,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_FILE] == 0) {
-		setcompname(COMP_FILE);
+		setcomp(COMP_FILE);
 		free(alts);
 		close(dns_fds[0]);
 		close(rvk_fds[0]);
@@ -375,7 +375,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_DNS] == 0) {
-		setcompname(COMP_DNS);
+		setcomp(COMP_DNS);
 		free(alts);
 		close(rvk_fds[0]);
 		c = dnsproc(dns_fds[0]);
@@ -390,7 +390,7 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "fork");
 
 	if (pids[COMP_REVOKE] == 0) {
-		setcompname(COMP_REVOKE);
+		setcomp(COMP_REVOKE);
 		c = revokeproc(rvk_fds[0], certdir,
 		    certfile != NULL ? certfile : fullchainfile,
 		    force, revocate,

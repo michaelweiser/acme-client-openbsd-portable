@@ -257,6 +257,7 @@ int		 verbose;
 /*
  * What component is the process within (COMP__MAX for none)?
  */
-void 		 setcompname(enum comp);
+void 		 setcomp(enum comp);
+enum comp	 getcomp(void);
 
 #endif /* ! EXTERN_H */

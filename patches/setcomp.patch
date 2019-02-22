@@ -1,27 +1,37 @@
---- util.c.orig	2018-01-05 19:41:00.811633360 +0000
-+++ util.c	2018-01-05 20:22:53.772456396 +0000
-@@ -308,3 +308,7 @@
+--- util.c
++++ util.c
+@@ -311,3 +311,17 @@ checkexit_ext(int *rc, pid_t pid, enum comp comp)
  	}
  	return 1;
  }
 +
-+void setcompname(enum comp comp) {
++/* Set and get the component name of this process. Set program name as a side
++ * effect so that log messages show the component name for easier
++ * identification. */
++static enum comp	 proccomp = COMP__MAX;
++
++void setcomp(enum comp comp) {
++	proccomp = comp;
 +	setprogname(comps[comp]);
 +}
---- extern.h.orig	2018-01-05 19:42:10.152227935 +0000
-+++ extern.h	2018-01-05 20:22:46.187569012 +0000
-@@ -253,7 +253,7 @@
++
++enum comp  getcomp(void) {
++	return proccomp;
++}
+--- extern.h
++++ extern.h
+@@ -257,6 +257,7 @@ int		 verbose;
  /*
   * What component is the process within (COMP__MAX for none)?
   */
 -enum comp	 proccomp;
-+void 		 setcompname(enum comp);
++void 		 setcomp(enum comp);
++enum comp	 getcomp(void);
  
- __END_DECLS
- 
---- main.c.orig	2018-01-05 20:16:05.904954655 +0000
-+++ main.c	2018-01-05 20:23:54.338920428 +0000
-@@ -46,7 +46,6 @@
+ #endif /* ! EXTERN_H */
+--- main.c
++++ main.c
+@@ -76,7 +76,6 @@ main(int argc, char *argv[])
  	int		  popts = 0;
  	pid_t		  pids[COMP__MAX];
  	extern int	  verbose;
@@ -29,75 +39,75 @@
  	size_t		  i, altsz, ne;
  
  	struct acme_conf	*conf = NULL;
-@@ -243,7 +242,7 @@
+@@ -245,7 +244,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_NET] == 0) {
 -		proccomp = COMP_NET;
-+		setcompname(COMP_NET);
++		setcomp(COMP_NET);
  		close(key_fds[0]);
  		close(acct_fds[0]);
  		close(chng_fds[0]);
-@@ -274,7 +273,7 @@
+@@ -276,7 +275,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_KEY] == 0) {
 -		proccomp = COMP_KEY;
-+		setcompname(COMP_KEY);
++		setcomp(COMP_KEY);
  		close(cert_fds[0]);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -296,7 +295,7 @@
+@@ -298,7 +297,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_ACCOUNT] == 0) {
 -		proccomp = COMP_ACCOUNT;
-+		setcompname(COMP_ACCOUNT);
++		setcomp(COMP_ACCOUNT);
  		free(alts);
  		close(cert_fds[0]);
  		close(dns_fds[0]);
-@@ -316,7 +315,7 @@
+@@ -318,7 +317,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_CHALLENGE] == 0) {
 -		proccomp = COMP_CHALLENGE;
-+		setcompname(COMP_CHALLENGE);
++		setcomp(COMP_CHALLENGE);
  		free(alts);
  		close(cert_fds[0]);
  		close(dns_fds[0]);
-@@ -335,7 +334,7 @@
+@@ -337,7 +336,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_CERT] == 0) {
 -		proccomp = COMP_CERT;
-+		setcompname(COMP_CERT);
++		setcomp(COMP_CERT);
  		free(alts);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -353,7 +352,7 @@
+@@ -355,7 +354,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_FILE] == 0) {
 -		proccomp = COMP_FILE;
-+		setcompname(COMP_FILE);
++		setcomp(COMP_FILE);
  		free(alts);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -374,7 +373,7 @@
+@@ -376,7 +375,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_DNS] == 0) {
 -		proccomp = COMP_DNS;
-+		setcompname(COMP_DNS);
++		setcomp(COMP_DNS);
  		free(alts);
  		close(rvk_fds[0]);
  		c = dnsproc(dns_fds[0]);
-@@ -389,7 +388,7 @@
+@@ -391,7 +390,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_REVOKE] == 0) {
 -		proccomp = COMP_REVOKE;
-+		setcompname(COMP_REVOKE);
++		setcomp(COMP_REVOKE);
  		c = revokeproc(rvk_fds[0], certdir,
  		    certfile != NULL ? certfile : fullchainfile,
  		    force, revocate,
