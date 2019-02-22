@@ -38,6 +38,9 @@
 #include <pwd.h> /* getpwnam() */
 #include <grp.h> /* setgroups() Linux */
 
+/* #include "pledge.h" - must not be included here because it redirects
+ * function calls to our interceptors by defining macros */
+
 #ifdef HAVE_LIBSECCOMP
 #include <seccomp.h>
 
@@ -51,7 +54,11 @@
 #include <linux/netlink.h> /* sockaddr_nl */
 #include <linux/futex.h> /* FUTEX_WAKE_PRIVATE */
 #include <limits.h> /* LONG_MAX */
-#endif
+#endif /* HAVE_LIBSECCOMP */
+
+#ifdef HAVE_LIBSANDBOX
+#include <sys/stat.h> /* stat(), struct stat */
+#endif /* HAVE_LIBSANDBOX */
 
 #include "bsd-sys-pledge.h"
 
@@ -320,7 +327,7 @@ seccomp_violation(int signum, siginfo_t *info, void *ctx)
 	errx(EXIT_FAILURE, "seccomp, syscall: %d", info->si_syscall);
 }
 
-static void sandbox(uint64_t promises, const enum comp proccomp) {
+static void seccomp_sandbox(uint64_t promises, const enum comp proccomp) {
 	struct sigaction act;
 	sigset_t mask;
 	scmp_filter_ctx ctx;
@@ -378,50 +385,232 @@ static void sandbox(uint64_t promises, const enum comp proccomp) {
 
 #ifdef HAVE_LIBSANDBOX
 /* do not use sandbox.h because it'll spew deprecation warnings */
-extern int sandbox_init(const char *, uint64_t, char **);
+extern int sandbox_init_with_parameters(const char *, uint64_t, char **,
+	char **);
+int sandbox_check(pid_t pid, const char *, int type, ...);
 extern void sandbox_free_error(char *);
 
 static struct {
-	const uint64_t promises;
+	const uint64_t comp;
 	const char *profile;
 } sb_profiles[] = {
-	{ PLEDGE_ALWAYS,
+	{ COMP__MAX,
 		"(version 1)"
-		"(deny default)" },
-
-	{ PLEDGE_STDIO, ""
+		"(deny default)"
+		/* since /etc and /var are symlinks, basically everybody needs
+		 * to be able to resolve them */
+		"(allow file-read-metadata "
+			"(require-any "
+				"(literal \"/etc\")"
+				"(literal \"/var\")"
+			")"
+		")"
 	},
 
-	{ PLEDGE_WPATH, ""
+	{ COMP_CHALLENGE,
+		/* funky behaviour: unlink() tries / of chroot first but then
+		 * falls back to non-chroot path (at least as far as seatbelt
+		 * is concerned). It seems we can deny from the root down to
+		 * the challenge-dir to silence error logging on this and then
+		 * allow again below the challenge dir. The two directives have
+		 * to be in exactly that order for this to work as desired. */
+		"(deny file-write-unlink (subpath \"/\")(with no-log))"
+		"(allow file-write-create file-write-unlink "
+			"(subpath (param \"challenge-dir\")))"
 	},
 
-	{ PLEDGE_RPATH, ""
+	{ COMP_FILE, ""
+		/* funkiness squared: file-write-create uses non-chroot path
+		 * from the get-go and file-write-mode doesn't fall back to the
+		 * non-chroot path. seatbelt doesn't seem well-tested with
+		 * chroot(). */
+		"(deny file-write-unlink (subpath \"/\")(with no-log))"
+		"(define (root-dir-relative path-param) "
+			"(string-append \"/\" (param path-param)))"
+		"(define (cert-dir-relative path-param) "
+			"(string-append "
+				"(param \"cert-dir\") "
+				"(root-dir-relative path-param)))"
+		"(define (mkstemp-regex path) "
+			"(regex "
+				"(string-append "
+					"\"^\" "
+					"(regex-quote path) "
+					"\"\\.[a-zA-Z0-9]+\")))"
+		"(define (cert-file-allow path-param) "
+			"(when (param path-param)"
+				"(allow file-write-create file-write-unlink "
+					"(require-any "
+						/* the file itself */
+						"(literal (cert-dir-relative path-param))"
+						/* mkstemp() staging file */
+						"(mkstemp-regex (cert-dir-relative path-param))"
+					")"
+				")"
+				"(allow file-write-mode "
+					"(require-any "
+						/* the file itself */
+						"(literal (root-dir-relative path-param))"
+						/* mkstemp() staging file */
+						"(mkstemp-regex (root-dir-relative path-param))"
+					")"
+				")"
+			")"
+		")"
+		/* param cert-dir is always set but which of cert-file,
+		 * chain-file and full-chain-file depends on configuration */
+		"(cert-file-allow \"cert-file\")"
+		"(cert-file-allow \"chain-file\")"
+		"(cert-file-allow \"full-chain-file\")"
+		//"(allow file-write-mode (subpath \"/\"))"
 	},
 
-	{ PLEDGE_DNS, ""
+	{ COMP_NET,
+		/* first pledge */
+		"(allow file-read-metadata (literal \"/private/etc/master.passwd\"))"
+		"(allow file-read-data (literal \"/private/etc/master.passwd\"))"
+		"(when (param \"unveil-path\")"
+			"(allow file-read-data (literal (param \"unveil-path\")))"
+		")"
+		"(allow file-chroot (literal (param \"privsep-path\")))"
+		/* second pledge */
+		"(allow network-outbound (remote tcp4 \"*:443\"))"
+		"(allow network-outbound (remote tcp4 \"*:80\"))"
 	},
 
-	{ PLEDGE_INET, ""
-	},
-
-	{ PLEDGE_CPATH, ""
-	},
+	{ COMP_DNS,
+		"(deny sysctl-read (sysctl-name \"net.routetable.0.0.3.0\")(with no-log))"
+		"(deny file-read-data "
+			"(require-any "
+				"(literal \"/dev/dtracehelper\")"
+				"(literal \"/Library/Preferences/Logging/com.apple.diagnosticd.filter.plist\")"
+				"(literal \"/dev/autofs_nowait\")"
+			")"
+			"(with no-log)"
+		")"
+		/* getaddrinfo -> mdns_attrinfo */
+		"(allow network-outbound (literal \"/private/var/run/mDNSResponder\"))"
+		"(allow file-read-metadata "
+			"(require-any "
+				/* getaddrinfo -> mdns_attrinfo */
+				/* getaddrinfo -> dyld -> libnetwork */
+				"(literal \"/\")"
+				"(literal \"/usr\")"
+				"(regex #\"/usr/lib/[^/]*\\.dylib\")"
+				"(regex #\"/usr/lib/system/[^/]*\\.dylib\")"
+				"(subpath \"/Library\")"
+				"(subpath \"/System/Library\")"
+			")"
+		")"
+		/* "(allow file-read-data (literal \"/private/etc/hosts\"))" */
+	}
 };
 
-static void sandbox(uint64_t promises, const enum comp proccomp) {
+static int num_sandbox_params = 0;
+static char **sandbox_params = NULL;
+
+void seatbelt_free_params() {
+	char **param = NULL;
+
+	if (sandbox_params == NULL)
+		return;
+
+	for (param = sandbox_params; *param; param++)
+		free(*param);
+
+	free(sandbox_params);
+
+	/* prevent possible additional calls to pledge_add_param() from
+	 * segfaulting */
+	sandbox_params = NULL;
+	num_sandbox_params = 0;
+}
+
+int seatbelt_add_param(const char *param, const char *value) {
+	char *param_copy = NULL, *value_copy = NULL;
+
+	/* do not add empty values - profile must handle this as optional
+	 * parameter */
+	if (value == NULL)
+		return 0;
+
+	param_copy = strdup(param);
+	if (param_copy == NULL)
+		return -1;
+
+	/* simplistic heuristic to detect paths. Breaks if a non-path param
+	 * ever starts with /. We currently only use params to provide paths.
+	 * */
+	if (value[0] == '/') {
+		struct stat st;
+		int strc = stat(value, &st);
+		if (strc == -1 && errno != EACCES && errno != ENOTDIR &&
+				errno !=ENOENT) {
+			free(param_copy);
+			return -1;
+		}
+
+		/* resolve symlinks because seatbelt gives us the real actual
+		 * path to match, but only if there's a chance this works */
+		if (strc == 0)
+			value_copy = realpath(value, NULL);
+	}
+
+	/* just use literally if any of the above failed */
+	if (value_copy == NULL)
+		value_copy = strdup(value);
+
+	if (value_copy == NULL) {
+		warn("foo?");
+		free(param_copy);
+		return -1;
+	}
+
+	num_sandbox_params += 2;
+	if ((sandbox_params = realloc(sandbox_params, (num_sandbox_params + 1)
+					* sizeof(*sandbox_params))) == NULL) {
+		free(value_copy);
+		free(param_copy);
+		return -1;
+	}
+
+	warn("adding param: %s=%s", param_copy, value_copy);
+	sandbox_params[num_sandbox_params - 2] = param_copy;
+	sandbox_params[num_sandbox_params - 1] = value_copy;
+	sandbox_params[num_sandbox_params] = NULL;
+
+	return 0;
+}
+
+int chngproc_intercept(int netsock, const char *root) {
+	seatbelt_add_param("challenge-dir", root);
+
+	return chngproc(netsock, root);
+}
+
+int fileproc_intercept(int certsock, const char *certdir, const char *certfile,
+		const char *chainfile, const char *fullchainfile) {
+	seatbelt_add_param("cert-dir", certdir);
+	seatbelt_add_param("cert-file", certfile);
+	seatbelt_add_param("chain-file", chainfile);
+	seatbelt_add_param("full-chain-file", fullchainfile);
+
+	return fileproc(certsock, certdir, certfile, chainfile, fullchainfile);
+}
+
+static void seatbelt_sandbox(uint64_t promises, const enum comp proccomp) {
 	char *se = NULL;
 	char *profile = NULL;
 	size_t plen = 0;
 	int i;
 
-	/* specifically ignore the first pledge call from netproc because it
-	 * still needs to read stuff and will get back to us after */
-	if ((proccomp == COMP_NET) && (promises & PLEDGE_RPATH))
+	/* do not sandbox twice */
+	if (sandbox_check(getpid(), NULL, 0))
 		return;
 
 	/* somewhat inefficient but we do it only once */
 	if ((profile = malloc(1)) == NULL)
-		err(EXIT_FAILURE, "malloc");
+		err(EXIT_FAILURE, "malloc sandbox profile");
 
 	profile[0] = '\0';
 	for (i = 0; i < nitems(sb_profiles); i++) {
@@ -431,23 +620,38 @@ static void sandbox(uint64_t promises, const enum comp proccomp) {
 
 		plen += strlen(sb_profiles[i].profile);
 		if ((profile = realloc(profile, plen + 1)) == NULL)
-			err(EXIT_FAILURE, "realloc");
+			err(EXIT_FAILURE, "realloc sandbox profile");
 
 		strcat(profile, sb_profiles[i].profile);
 	}
 
-	/* they've deprecated it but all the system deamons still use it in
-	 * seemingly the same way. So it might stay around for a while. */
-	if (sandbox_init(profile, 0, &se) != 0) {
-		warn("sandbox_init: %s", se);
+	/* add the privilege separation path as parameter to allow chrooting
+	 * into it and get symlinks in the path resolved. But only if we're not
+	 * chrooted yet because it's unlikely to exist in the new root and also
+	 * unlikely we're going to chroot() again. */
+	if (seatbelt_add_param("privsep-path", PRIVSEP_PATH) == -1) {
+		warn("seatbelt_add_param privsep-path");
 		goto sandbox_fail;
 	}
+
+	/* they've deprecated it but all the system deamons still use it in
+	 * seemingly the same way. So it might stay around for a while. */
+	if (sandbox_init_with_parameters(profile, 0,
+				sandbox_params, &se) != 0) {
+		warn("sandbox_init_with_parameters: %s", se);
+		goto sandbox_fail;
+	}
+
+	free(profile);
+	seatbelt_free_params();
+	return;
 
 sandbox_fail:
 	if (se)
 		sandbox_free_error(se);
 	if (profile)
 		free(profile);
+	seatbelt_free_params();
 	exit(EXIT_FAILURE);
 }
 #endif
@@ -517,9 +721,14 @@ pledge(const char *p_req, const char *ep_req)
 	/* portable chroot() and setuid(), does not return on error */
 	chroot_droppriv(promises);
 
-#if defined(HAVE_LIBSECCOMP) || defined(HAVE_LIBSANDBOX)
+#if defined(HAVE_LIBSECCOMP)
 	/* does not return on error */
-	sandbox(promises, getcomp());
+	seccomp_sandbox(promises, getcomp());
+#endif
+
+#if defined(HAVE_LIBSANDBOX)
+	/* does not return on error */
+	seatbelt_sandbox(promises, getcomp());
 #endif
 
 	return 0;

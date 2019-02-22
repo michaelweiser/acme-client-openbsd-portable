@@ -37,7 +37,7 @@ AC_TYPE_UINT64_T
 
 # Checks for library functions.
 AC_FUNC_FORK
-AC_CHECK_FUNCS([getpagesize memset socket strchr strdup strerror strndup strrchr strstr])
+AC_CHECK_FUNCS([getpagesize memset realpath socket strchr strdup strerror strndup strrchr strstr])
 m4_include([m4/funcs.m4])
 
 AC_CONFIG_FILES([Makefile])
