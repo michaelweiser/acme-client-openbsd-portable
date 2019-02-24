@@ -107,11 +107,11 @@ cat <<EOF >> Makefile.am
 acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
 
 # AM_CPPFLAGS so it also applies to LIBOBJS
-AM_CPPFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
+AM_CFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
 	-DWWW_DIR='"\$(wwwdir)"' \\
 	-DPRIVSEP_PATH='"\$(privseppath)"' \\
 	-DPRIVSEP_USER='"\$(privsepuser)"' \\
-	-DDEFAULT_CA_FILE='"\$(defaultcafile)"'
+	-DDEFAULT_CA_FILE='"\$(defaultcafile)"' \\
 	\$(WARN_CFLAGS) \\
 	\$(libtls_CFLAGS) \$(libcrypto_CFLAGS) \\
 	\$(libseccomp_CFLAGS)
