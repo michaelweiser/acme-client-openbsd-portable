@@ -2,7 +2,7 @@
 
 set -e
 
-version=0.4
+version=0.5
 bugurl=https://github.com/michaelweiser/acme-client-openbsd-portable.git
 
 srcdir=$PWD
