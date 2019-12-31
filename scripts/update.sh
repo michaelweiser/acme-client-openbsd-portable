@@ -76,7 +76,7 @@ for i in "$tmpdir"/*.[chy] ; do
 		-e 's,<tls.h>,"libressl-tls.h",g' \
 		-e "/include.*includes\.h/s/includes\.h/config.h/" \
 		$i | \
-	awk '/^#include.*\"config\.h\"/ { x=1 }
+	awk '/^#include.*"config\.h"/ { x=1 }
 		/^#include/ && !x { print "#include \"config.h\""  ; x=1 } 1' \
 		 > $i.tmp
 	mv $i.tmp $i
