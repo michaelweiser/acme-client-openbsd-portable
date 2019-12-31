@@ -46,7 +46,7 @@
 
 /* headers for values in filters */
 #include <signal.h> /* SIGPIPE */
-#include <sys/socket.h> /* AF_{UNIX,INET,NETLINK} */
+#include <sys/socket.h> /* AF_{UNIX,INET,NETLINK}, SOL_IP/IP_RECVERR */
 #include <netinet/in.h> /* sockaddr_{in,in6} */
 #include <sys/un.h> /* sockaddr_un */
 #include <sys/ioctl.h> /* FIONREAD */
@@ -207,6 +207,12 @@ static struct {
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
 		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "setsockopt", 2, /* glibc 2.30+ */
+		{ SCMP_A1(SCMP_CMP_EQ, (uint32_t)IPPROTO_IP),
+		  SCMP_A2(SCMP_CMP_EQ, (uint32_t)IP_RECVERR) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "setsockopt", 2, /* glibc 2.30+ */
+		{ SCMP_A1(SCMP_CMP_EQ, (uint32_t)IPPROTO_IPV6),
+		  SCMP_A2(SCMP_CMP_EQ, (uint32_t)IP_RECVERR) }},
 
 	/* /etc/localtime, zoneinfo */
 	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "open", 1,
