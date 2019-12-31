@@ -1,4 +1,4 @@
-/*	$OpenBSD: parse.y,v 1.33 2019/02/13 22:57:08 deraadt Exp $ */
+/*	$OpenBSD: parse.y,v 1.39 2019/12/27 16:56:40 benno Exp $ */
 
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <limits.h>
 #include "bsd-stdarg.h"
 #include <stdio.h>
@@ -38,6 +39,7 @@
 #include "bsd-unistd.h"
 
 #include "parse.h"
+#include "extern.h"
 
 TAILQ_HEAD(files, file)		 files = TAILQ_HEAD_INITIALIZER(files);
 static struct file {
@@ -69,8 +71,9 @@ struct authority_c	*conf_new_authority(struct acme_conf *, char *);
 struct domain_c		*conf_new_domain(struct acme_conf *, char *);
 struct keyfile		*conf_new_keyfile(struct acme_conf *, char *);
 void			 clear_config(struct acme_conf *);
+const char*		 kt2txt(enum keytype);
 void			 print_config(struct acme_conf *);
-int			 conf_check_file(char *, int);
+int			 conf_check_file(char *);
 
 TAILQ_HEAD(symhead, sym)	 symhead = TAILQ_HEAD_INITIALIZER(symhead);
 struct sym {
@@ -103,9 +106,11 @@ typedef struct {
 %token	YES NO
 %token	INCLUDE
 %token	ERROR
+%token	RSA ECDSA
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
 %type	<v.string>	string
+%type	<v.number>	keytype
 
 %%
 
@@ -215,7 +220,7 @@ authorityoptsl	: API URL STRING {
 				err(EXIT_FAILURE, "strdup");
 			auth->api = s;
 		}
-		| ACCOUNT KEY STRING {
+		| ACCOUNT KEY STRING keytype{
 			char *s;
 			if (auth->account != NULL) {
 				yyerror("duplicate account");
@@ -224,6 +229,7 @@ authorityoptsl	: API URL STRING {
 			if ((s = strdup($3)) == NULL)
 				err(EXIT_FAILURE, "strdup");
 			auth->account = s;
+			auth->keytype = $4;
 		}
 		;
 
@@ -258,12 +264,17 @@ domain		: DOMAIN STRING {
 		}
 		;
 
+keytype		: RSA	{ $$ = KT_RSA; }
+		| ECDSA	{ $$ = KT_ECDSA; }
+		|	{ $$ = KT_RSA; }
+		;
+
 domainopts_l	: domainopts_l domainoptsl nl
 		| domainoptsl optnl
 		;
 
 domainoptsl	: ALTERNATIVE NAMES '{' altname_l '}'
-		| DOMAIN KEY STRING {
+		| DOMAIN KEY STRING keytype {
 			char *s;
 			if (domain->key != NULL) {
 				yyerror("duplicate key");
@@ -271,8 +282,7 @@ domainoptsl	: ALTERNATIVE NAMES '{' altname_l '}'
 			}
 			if ((s = strdup($3)) == NULL)
 				err(EXIT_FAILURE, "strdup");
-			if (!conf_check_file(s,
-			    (conf->opts & ACME_OPT_NEWDKEY))) {
+			if (!conf_check_file(s)) {
 				free(s);
 				YYERROR;
 			}
@@ -282,6 +292,7 @@ domainoptsl	: ALTERNATIVE NAMES '{' altname_l '}'
 				YYERROR;
 			}
 			domain->key = s;
+			domain->keytype = $4;
 		}
 		| DOMAIN CERT STRING {
 			char *s;
@@ -428,10 +439,12 @@ lookup(char *s)
 		{"chain",		CHAIN},
 		{"challengedir",	CHALLENGEDIR},
 		{"domain",		DOMAIN},
+		{"ecdsa",		ECDSA},
 		{"full",		FULL},
 		{"include",		INCLUDE},
 		{"key",			KEY},
 		{"names",		NAMES},
+		{"rsa",			RSA},
 		{"sign",		SIGN},
 		{"url",			URL},
 		{"with",		WITH},
@@ -799,8 +812,12 @@ parse_config(const char *filename, int opts)
 		return NULL;
 	}
 
-	if (opts & ACME_OPT_CHECK)
-		print_config(conf);
+	if (opts & ACME_OPT_CHECK) {
+		if (opts & ACME_OPT_VERBOSE)
+			print_config(conf);
+		exit(0);
+	}
+
 
 	return conf;
 }
@@ -983,6 +1000,19 @@ clear_config(struct acme_conf *xconf)
 	free(xconf);
 }
 
+const char*
+kt2txt(enum keytype kt)
+{
+	switch (kt) {
+	case KT_RSA:
+		return "rsa";
+	case KT_ECDSA:
+		return "ecdsa";
+	default:
+		return "<unknown>";
+	}
+}
+
 void
 print_config(struct acme_conf *xconf)
 {
@@ -996,7 +1026,8 @@ print_config(struct acme_conf *xconf)
 		if (a->api != NULL)
 			printf("\tapi url \"%s\"\n", a->api);
 		if (a->account != NULL)
-			printf("\taccount key \"%s\"\n", a->account);
+			printf("\taccount key \"%s\" %s\n", a->account,
+			    kt2txt(a->keytype));
 		printf("}\n\n");
 	}
 	TAILQ_FOREACH(d, &xconf->domain_list, entry) {
@@ -1013,7 +1044,8 @@ print_config(struct acme_conf *xconf)
 		if (f)
 			printf(" }\n");
 		if (d->key != NULL)
-			printf("\tdomain key \"%s\"\n", d->key);
+			printf("\tdomain key \"%s\" %s\n", d->key, kt2txt(
+			    d->keytype));
 		if (d->cert != NULL)
 			printf("\tdomain certificate \"%s\"\n", d->cert);
 		if (d->chain != NULL)
@@ -1047,7 +1079,7 @@ domain_valid(const char *cp)
 }
 
 int
-conf_check_file(char *s, int dontstat)
+conf_check_file(char *s)
 {
 	struct stat st;
 
@@ -1055,9 +1087,9 @@ conf_check_file(char *s, int dontstat)
 		warnx("%s: not an absolute path", s);
 		return 0;
 	}
-	if (dontstat)
-		return 1;
 	if (stat(s, &st)) {
+		if (errno == ENOENT)
+			return 1;
 		warn("cannot stat %s", s);
 		return 0;
 	}

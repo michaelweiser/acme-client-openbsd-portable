@@ -7,7 +7,7 @@ AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 m4_include([m4/act_search_libs.m4])
 m4_include([m4/act_check_program.m4])
 m4_include([m4/args.m4])
-AC_CONFIG_SRCDIR([json.c])
+AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADERS([config.h])
 AC_USE_SYSTEM_EXTENSIONS
 AX_CFLAGS_WARN_ALL
@@ -22,8 +22,9 @@ PKG_PROG_PKG_CONFIG
 m4_include([m4/libs.m4])
 
 # Checks for header files.
+AC_FUNC_ALLOCA
 AC_HEADER_RESOLV
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h strings.h sys/ioctl.h sys/param.h sys/socket.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h limits.h malloc.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h strings.h sys/ioctl.h sys/param.h sys/socket.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_UID_T
@@ -37,7 +38,7 @@ AC_TYPE_UINT64_T
 
 # Checks for library functions.
 AC_FUNC_FORK
-AC_CHECK_FUNCS([getpagesize memset realpath socket strchr strdup strerror strndup strrchr strstr])
+AC_CHECK_FUNCS([getpagesize memset realpath socket strcasecmp strchr strdup strerror strndup strrchr strstr])
 m4_include([m4/funcs.m4])
 
 AC_CONFIG_FILES([Makefile])

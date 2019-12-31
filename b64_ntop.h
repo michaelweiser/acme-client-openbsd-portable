@@ -46,6 +46,7 @@
 #include "config.h"
 #include <sys/types.h>
 
+
 #ifndef HAVE___B64_NTOP
 # ifndef HAVE_B64_NTOP
 int b64_ntop(u_char const *src, size_t srclength, char *target,

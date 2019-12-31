@@ -1,5 +1,5 @@
---- main.c
-+++ main.c
+--- main.c.orig	2019-12-31 15:40:04.503186440 +0100
++++ main.c	2019-12-31 15:40:22.650002958 +0100
 @@ -30,6 +30,9 @@
  #include "extern.h"
  #include "parse.h"
@@ -7,6 +7,6 @@
 +/* intercept function calls to extract parameters for our pledge replacement */
 +#include "pledge.h"
 +
- /* glibc dirname and basename (may) modify their input buffers, BSD uses static
-  * internal buffers. So we need to strdup twice to be on the safe side. */
- char *xdirname(char *path) {
+ int
+ main(int argc, char *argv[])
+ {
