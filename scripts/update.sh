@@ -106,7 +106,6 @@ rm -rf "$tmpdir"
 cat <<EOF >> Makefile.am
 acme_client_SOURCES += $(echo *.h | sed -e "s/ config.h / /g")
 
-# AM_CPPFLAGS so it also applies to LIBOBJS
 AM_CFLAGS = -DCONF_FILE='"\$(sysconfdir)/acme-client.conf"' \\
 	-DWWW_DIR='"\$(wwwdir)"' \\
 	-DPRIVSEP_PATH='"\$(privseppath)"' \\
