@@ -65,6 +65,7 @@ rm -rf "$os"
 # make openssh bits include our config.h instead of their includes.h.
 # Redirect some includes to augmented ones with additional definitions.
 # Have all files source config.h if not already present.
+# Silence warnings from attempt to declare replacement functions weak.
 for i in "$tmpdir"/*.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
 		-e 's,<string\.h>,"bsd-string.h",g' \
@@ -75,6 +76,7 @@ for i in "$tmpdir"/*.[chy] ; do
 		-e 's,<sys/queue\.h>,"bsd-sys-queue.h",g' \
 		-e 's,<tls.h>,"libressl-tls.h",g' \
 		-e "/include.*includes\.h/s/includes\.h/config.h/" \
+		-e "/^DEF_WEAK/d" \
 		$i | \
 	awk '/^#include.*"config\.h"/ { x=1 }
 		/^#include/ && !x { print "#include \"config.h\""  ; x=1 } 1' \
