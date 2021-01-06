@@ -1,4 +1,4 @@
-/*	$Id: main.c,v 1.52 2019/06/17 12:42:52 florian Exp $ */
+/*	$Id: main.c,v 1.54 2020/05/10 12:06:18 benno Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -30,6 +30,9 @@
 #include "extern.h"
 #include "parse.h"
 
+int		 verbose;
+enum comp 	 proccomp;
+
 /* intercept function calls to extract parameters for our pledge replacement */
 #include "pledge.h"
 
@@ -47,7 +50,6 @@ main(int argc, char *argv[])
 	int		  c, rc, revocate = 0;
 	int		  popts = 0;
 	pid_t		  pids[COMP__MAX];
-	extern int	  verbose;
 	size_t		  i, altsz, ne;
 
 	struct acme_conf	*conf = NULL;
@@ -90,7 +92,7 @@ main(int argc, char *argv[])
 	if (argc != 1)
 		goto usage;
 
-	if ((domain = domain_find(conf, argv[0])) == NULL)
+	if ((domain = domain_find_handle(conf, argv[0])) == NULL)
 		errx(EXIT_FAILURE, "domain %s not found", argv[0]);
 
 	argc--;
@@ -375,6 +377,6 @@ main(int argc, char *argv[])
 	return rc != COMP__MAX ? EXIT_FAILURE : (c == 2 ? EXIT_SUCCESS : 2);
 usage:
 	fprintf(stderr,
-	    "usage: acme-client [-Fnrv] [-f configfile] domain\n");
+	    "usage: acme-client [-Fnrv] [-f configfile] handle\n");
 	return EXIT_FAILURE;
 }

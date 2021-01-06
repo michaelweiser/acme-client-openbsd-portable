@@ -7,7 +7,7 @@ AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 m4_include([m4/act_search_libs.m4])
 m4_include([m4/act_check_program.m4])
 m4_include([m4/args.m4])
-AC_CONFIG_SRCDIR([config.h.in])
+AC_CONFIG_SRCDIR([dnsproc.c])
 AC_CONFIG_HEADERS([config.h])
 AC_USE_SYSTEM_EXTENSIONS
 AX_CFLAGS_WARN_ALL
@@ -35,10 +35,11 @@ AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
+AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for library functions.
 AC_FUNC_FORK
-AC_CHECK_FUNCS([getpagesize memset realpath socket strcasecmp strchr strdup strerror strndup strrchr strstr])
+AC_CHECK_FUNCS([getpagesize isascii memset realpath socket strcasecmp strchr strdup strerror strndup strrchr strstr])
 m4_include([m4/funcs.m4])
 
 AC_CONFIG_FILES([Makefile])

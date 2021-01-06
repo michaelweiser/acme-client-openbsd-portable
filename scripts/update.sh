@@ -55,7 +55,7 @@ cp "$os"/openbsd-compat/sys-queue.h "$tmpdir"/bsd-sys-queue.h
 for i in bsd-asprintf.c bsd-setres_id.h \
 		strtonum.c strlcat.c strlcpy.c \
 		reallocarray.c recallocarray.c \
-		explicit_bzero.c ; do
+		explicit_bzero.c vis.c vis.h ; do
 	cp "$os"/openbsd-compat/$i "$tmpdir"
 done
 

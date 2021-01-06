@@ -1,4 +1,4 @@
-/*	$Id: json.c,v 1.14 2019/06/18 18:50:07 florian Exp $ */
+/*	$Id: json.c,v 1.21 2020/09/14 16:00:17 florian Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -266,7 +266,6 @@ json_getarray(struct jsmnn *n, const char *name)
 	return n->d.obj[i].rhs;
 }
 
-#ifdef notyet
 /*
  * Extract subtree from the returned JSON object, making sure that it's
  * the correct type.
@@ -293,14 +292,13 @@ json_getobj(struct jsmnn *n, const char *name)
 		return NULL;
 	return n->d.obj[i].rhs;
 }
-#endif /* notyet */
 
 /*
  * Extract a single string from the returned JSON object, making sure
  * that it's the correct type.
  * Returns NULL on failure.
  */
-static char *
+char *
 json_getstr(struct jsmnn *n, const char *name)
 {
 	size_t		 i;
@@ -376,7 +374,7 @@ json_parse_response(struct jsmnn *n)
 int
 json_parse_challenge(struct jsmnn *n, struct chng *p)
 {
-	struct jsmnn	*array, *obj;
+	struct jsmnn	*array, *obj, *error;
 	size_t		 i;
 	int		 rc;
 	char		*type;
@@ -402,6 +400,10 @@ json_parse_challenge(struct jsmnn *n, struct chng *p)
 		p->uri = json_getstr(obj, "url");
 		p->token = json_getstr(obj, "token");
 		p->status = json_parse_response(obj);
+		if (p->status == CHNG_INVALID) {
+			error = json_getobj(obj, "error");
+			p->error = json_getstr(error, "detail");
+		}
 		return p->uri != NULL && p->token != NULL;
 	}
 
@@ -460,12 +462,13 @@ json_parse_order(struct jsmnn *n, struct order *order)
 	if ((array = json_getarray(n, "authorizations")) == NULL)
 		goto err;
 
-	if ((order->authsz = array->fields) > 0) {
-		order->auths = calloc(sizeof(*order->auths), order->authsz);
+	if (array->fields > 0) {
+		order->auths = calloc(array->fields, sizeof(*order->auths));
 		if (order->auths == NULL) {
 			warn("malloc");
 			goto err;
 		}
+		order->authsz = array->fields;
 	}
 
 	for (i = 0; i < array->fields; i++) {
@@ -479,7 +482,7 @@ json_parse_order(struct jsmnn *n, struct order *order)
 	}
 	return 1;
 err:
-	json_free_order(order);	
+	json_free_order(order);
 	return 0;
 }
 
@@ -505,7 +508,7 @@ json_free_order(struct order *order)
 	for(i = 0; i < order->authsz; i++)
 		free(order->auths[i]);
 	free(order->auths);
-	
+
 	order->finalize = NULL;
 	order->auths = NULL;
 	order->authsz = 0;
@@ -616,14 +619,24 @@ json_fmt_chkacc(void)
  * Format the "newAccount" resource request.
  */
 char *
-json_fmt_newacc(void)
+json_fmt_newacc(const char *contact)
 {
 	int	 c;
-	char	*p;
+	char	*p, *cnt = NULL;
+
+	if (contact != NULL) {
+		c = asprintf(&cnt, "\"contact\": [ \"%s\" ], ", contact);
+		if (c == -1) {
+			warn("asprintf");
+			return NULL;
+		}
+	}
 
 	c = asprintf(&p, "{"
+	    "%s"
 	    "\"termsOfServiceAgreed\": true"
-	    "}");
+	    "}", cnt == NULL ? "" : cnt);
+	free(cnt);
 	if (c == -1) {
 		warn("asprintf");
 		p = NULL;

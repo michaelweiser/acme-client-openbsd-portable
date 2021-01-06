@@ -1,4 +1,4 @@
-.\"	$OpenBSD: acme-client.conf.5,v 1.21 2019/07/04 05:06:06 solene Exp $
+.\"	$OpenBSD: acme-client.conf.5,v 1.28 2021/01/03 16:32:38 florian Exp $
 .\"
 .\" Copyright (c) 2005 Esben Norby <norby@openbsd.org>
 .\" Copyright (c) 2004 Claudio Jeker <claudio@openbsd.org>
@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: July 4 2019 $
+.Dd $Mdocdate: January 3 2021 $
 .Dt ACME-CLIENT.CONF 5
 .Os
 .Sh NAME
@@ -98,19 +98,32 @@ It defaults to
 Specify the
 .Ar url
 under which the ACME API is reachable.
+.It Ic contact Ar contact
+Optional
+.Ar contact
+URLs that the authority can use to contact the client for issues related to
+this account.
 .El
 .Sh DOMAINS
 The certificates to be obtained through ACME.
 .Bl -tag -width Ds
-.It Ic domain Ar name Brq ...
+.It Ic domain Ar handle Brq ...
 Each domain section begins with the
 .Ic domain
-keyword followed by the name to be used as the common name component
-of the subject of the X.509 certificate.
+keyword followed by an identifier for this domain block.
 .El
 .Pp
 It is followed by a block of options enclosed in curly brackets:
 .Bl -tag -width Ds
+.It Ic domain name Ar name
+The
+.Ar name
+to be used as the common name component of the subject of the
+X.509 certificate.
+This is optional.
+If not specified, the
+.Ar handle
+of the domain block will be used as common name.
 .It Ic alternative names Brq ...
 Specify a list of alternative names for which the certificate will be valid.
 The common name is included automatically if this option is present,
@@ -125,11 +138,22 @@ or
 .Cm ecdsa .
 It defaults to
 .Cm rsa .
+If the key file does not exist,
+.Xr acme-client 1
+will generate a key itself (4096-bit for
+.Cm rsa
+or secp384r1 for
+.Cm ecdsa ) .
 .It Ic domain certificate Ar file
 The filename of the certificate that will be issued.
 This is optional if
 .Ar domain full chain certificate
 is specified.
+A backup with name
+.Ar file.1
+is created if
+.Ar file
+exists.
 .It Ic domain chain certificate Ar file
 The filename in which to store the certificate chain
 that will be returned by the certificate authority.
@@ -137,6 +161,11 @@ It needs to be in the same directory as the
 .Ar domain certificate
 (or in a subdirectory) and can be specified as a relative or absolute path.
 This setting is optional.
+A backup with name
+.Ar file.1
+is created if
+.Ar file
+exists.
 .It Ic domain full chain certificate Ar file
 The filename in which to store the full certificate chain
 that will be returned by the certificate authority.
@@ -151,6 +180,11 @@ in one file, and is required by most browsers.
 This is optional if
 .Ar domain certificate
 is specified.
+A backup with name
+.Ar file.1
+is created if
+.Ar file
+exists.
 .It Ic sign with Ar authority
 The certificate authority (as declared above in the
 .Sx AUTHORITIES
@@ -163,10 +197,12 @@ If it is not specified, a default of
 will be used.
 .El
 .Sh FILES
-.Bl -tag -width "/etc/acme-client.conf" -compact
+.Bl -tag -width /etc/examples/acme-client.conf -compact
 .It Pa /etc/acme-client.conf
 .Xr acme-client 1
-configuration file
+configuration file.
+.It Pa /etc/examples/acme-client.conf
+Example configuration file.
 .El
 .Sh SEE ALSO
 .Xr acme-client 1

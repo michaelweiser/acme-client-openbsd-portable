@@ -1,45 +1,30 @@
 --- util.c
 +++ util.c
-@@ -311,3 +311,17 @@ checkexit_ext(int *rc, pid_t pid, enum comp comp)
+@@ -311,3 +311,11 @@ checkexit_ext(int *rc, pid_t pid, enum comp comp)
  	}
  	return 1;
  }
 +
-+/* Set and get the component name of this process. Set program name as a side
++/* Set the component identifier of this process. Set program name as a side
 + * effect so that log messages show the component name for easier
 + * identification. */
-+static enum comp	 proccomp = COMP__MAX;
-+
 +void setcomp(enum comp comp) {
 +	proccomp = comp;
 +	setprogname(comps[comp]);
 +}
-+
-+enum comp  getcomp(void) {
-+	return proccomp;
-+}
 --- extern.h
 +++ extern.h
-@@ -257,6 +257,7 @@ int		 verbose;
- /*
+@@ -286,5 +286,6 @@ extern int	 verbose;
   * What component is the process within (COMP__MAX for none)?
   */
--enum comp	 proccomp;
-+void 		 setcomp(enum comp);
-+enum comp	 getcomp(void);
+ extern enum comp proccomp;
++void		 setcomp(enum comp);
  
  #endif /* ! EXTERN_H */
---- main.c.orig	2019-12-31 15:42:36.593855462 +0100
-+++ main.c	2019-12-31 15:44:21.663930712 +0100
-@@ -48,7 +48,6 @@
- 	int		  popts = 0;
- 	pid_t		  pids[COMP__MAX];
- 	extern int	  verbose;
--	extern enum comp  proccomp;
- 	size_t		  i, altsz, ne;
- 
- 	struct acme_conf	*conf = NULL;
-@@ -204,7 +203,7 @@
+diff --git a/main.c b/main.c
+--- main.c
++++ main.c
+@@ -205,7 +205,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_NET] == 0) {
@@ -48,7 +33,7 @@
  		close(key_fds[0]);
  		close(acct_fds[0]);
  		close(chng_fds[0]);
-@@ -234,7 +233,7 @@
+@@ -235,7 +235,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_KEY] == 0) {
@@ -57,7 +42,7 @@
  		close(cert_fds[0]);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -256,7 +255,7 @@
+@@ -257,7 +257,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_ACCOUNT] == 0) {
@@ -66,7 +51,7 @@
  		close(cert_fds[0]);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -276,7 +275,7 @@
+@@ -277,7 +277,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_CHALLENGE] == 0) {
@@ -75,7 +60,7 @@
  		close(cert_fds[0]);
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
-@@ -294,7 +293,7 @@
+@@ -295,7 +295,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_CERT] == 0) {
@@ -84,7 +69,7 @@
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
  		close(file_fds[1]);
-@@ -311,7 +310,7 @@
+@@ -312,7 +312,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_FILE] == 0) {
@@ -93,7 +78,7 @@
  		close(dns_fds[0]);
  		close(rvk_fds[0]);
  		c = fileproc(file_fds[1], certdir, domain->cert, domain->chain,
-@@ -331,7 +330,7 @@
+@@ -332,7 +332,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_DNS] == 0) {
@@ -102,7 +87,7 @@
  		close(rvk_fds[0]);
  		c = dnsproc(dns_fds[0]);
  		exit(c ? EXIT_SUCCESS : EXIT_FAILURE);
-@@ -345,7 +344,7 @@
+@@ -346,7 +346,7 @@ main(int argc, char *argv[])
  		err(EXIT_FAILURE, "fork");
  
  	if (pids[COMP_REVOKE] == 0) {
@@ -111,3 +96,25 @@
  		c = revokeproc(rvk_fds[0], domain->cert != NULL ? domain->cert :
  		    domain->fullchain, force, revocate,
  		    (const char *const *)alts, altsz);
+--- /dev/null	2021-01-02 03:16:12.088471407 +0100
++++ setprogname.c	2021-01-08 19:26:23.110203641 +0100
+@@ -0,0 +1,19 @@
++#ifndef HAVE_SETPROGNAME
++#include "bsd-stdlib.h"
++#include <string.h>
++
++#ifdef HAVE___PROGNAME
++extern const char *__progname;
++#endif
++
++void setprogname(const char *progname) {
++#ifdef HAVE___PROGNAME
++	char *slash = strrchr(progname, '/');
++	if (slash != NULL) {
++		__progname = slash + 1;
++	} else {
++		__progname = progname;
++	}
++#endif
++}
++#endif

@@ -62,7 +62,7 @@
 
 #include "bsd-sys-pledge.h"
 
-#include "extern.h" /* dodbg() */
+#include "extern.h" /* dodbg(), proccomp */
 
 /* acme-client uses only a few pledges. Deactivate the others so we bail if
  * upstream starts to use more */
@@ -729,12 +729,12 @@ pledge(const char *p_req, const char *ep_req)
 
 #if defined(HAVE_LIBSECCOMP)
 	/* does not return on error */
-	seccomp_sandbox(promises, getcomp());
+	seccomp_sandbox(promises, proccomp);
 #endif
 
 #if defined(HAVE_LIBSANDBOX)
 	/* does not return on error */
-	seatbelt_sandbox(promises, getcomp());
+	seatbelt_sandbox(promises, proccomp);
 #endif
 
 	return 0;
