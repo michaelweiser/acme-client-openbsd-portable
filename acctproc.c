@@ -68,6 +68,12 @@ bn2string(const BIGNUM *bn)
 	return bbuf;
 }
 
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+#define RSA_get0_n(r) ((r)->n)
+#define RSA_get0_e(r) ((r)->e)
+#define EVP_PKEY_id(pkey) ((pkey)->type)
+#endif
+
 /*
  * Extract the relevant RSA components from the key and create the JSON
  * thumbprint from them.
@@ -80,9 +86,9 @@ op_thumb_rsa(EVP_PKEY *pkey)
 
 	if ((r = EVP_PKEY_get0_RSA(pkey)) == NULL)
 		warnx("EVP_PKEY_get0_RSA");
-	else if ((mod = bn2string(r->n)) == NULL)
+	else if ((mod = bn2string(RSA_get0_n(r))) == NULL)
 		warnx("bn2string");
-	else if ((exp = bn2string(r->e)) == NULL)
+	else if ((exp = bn2string(RSA_get0_e(r))) == NULL)
 		warnx("bn2string");
 	else if ((json = json_fmt_thumb_rsa(exp, mod)) == NULL)
 		warnx("json_fmt_thumb_rsa");
@@ -141,7 +147,7 @@ op_thumbprint(int fd, EVP_PKEY *pkey)
 
 	/* Construct the thumbprint input itself. */
 
-	switch (EVP_PKEY_type(pkey->type)) {
+	switch (EVP_PKEY_id(pkey)) {
 	case EVP_PKEY_RSA:
 		if ((thumb = op_thumb_rsa(pkey)) != NULL)
 			break;
@@ -208,9 +214,9 @@ op_sign_rsa(char **prot, EVP_PKEY *pkey, const char *nonce, const char *url)
 
 	if ((r = EVP_PKEY_get0_RSA(pkey)) == NULL)
 		warnx("EVP_PKEY_get0_RSA");
-	else if ((mod = bn2string(r->n)) == NULL)
+	else if ((mod = bn2string(RSA_get0_n(r))) == NULL)
 		warnx("bn2string");
-	else if ((exp = bn2string(r->e)) == NULL)
+	else if ((exp = bn2string(RSA_get0_e(r))) == NULL)
 		warnx("bn2string");
 	else if ((*prot = json_fmt_protected_rsa(exp, mod, nonce, url)) == NULL)
 		warnx("json_fmt_protected_rsa");
@@ -298,7 +304,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
 		goto out;
 	}
 
-	switch (EVP_PKEY_type(pkey->type)) {
+	switch (EVP_PKEY_id(pkey)) {
 	case EVP_PKEY_RSA:
 		alg = "RS256";
 		evp_md = EVP_sha256();
@@ -319,7 +325,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
 			goto out;
 		}
 	} else {
-		switch (EVP_PKEY_type(pkey->type)) {
+		switch (EVP_PKEY_id(pkey)) {
 		case EVP_PKEY_RSA:
 			if (!op_sign_rsa(&prot, pkey, nonce, url))
 				goto out;
@@ -374,7 +380,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
 		goto out;
 	}
 
-	switch (EVP_PKEY_type(pkey->type)) {
+	switch (EVP_PKEY_id(pkey)) {
 	case EVP_PKEY_RSA:
 		if ((dig64 = base64buf_url((char *)dig, digsz)) == NULL) {
 			warnx("base64buf_url");
@@ -486,7 +492,9 @@ acctproc(int netsock, const char *acctkey, enum keytype keytype)
 
 	/* File-system, user, and sandbox jailing. */
 
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_load_crypto_strings();
+#endif
 
 	if (pledge("stdio", NULL) == -1) {
 		warn("pledge");
@@ -567,6 +575,8 @@ out:
 		fclose(f);
 	EVP_PKEY_free(pkey);
 	ERR_print_errors_fp(stderr);
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_free_strings();
+#endif
 	return rc;
 }

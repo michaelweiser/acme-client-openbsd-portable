@@ -110,7 +110,9 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
 
 	/* File-system, user, and sandbox jail. */
 
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_load_crypto_strings();
+#endif
 
 	if (pledge("stdio", NULL) == -1) {
 		warn("pledge");
@@ -270,6 +272,8 @@ out:
 	X509_NAME_free(name);
 	EVP_PKEY_free(pkey);
 	ERR_print_errors_fp(stderr);
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_free_strings();
+#endif
 	return rc;
 }

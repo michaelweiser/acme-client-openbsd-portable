@@ -91,6 +91,11 @@ X509expires(X509 *x)
 	return mktime(&t);
 }
 
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+#define X509_get0_extensions(x) ((x)->cert_info->extensions)
+#define BIO_number_written(bio) ((bio)->num_write)
+#endif
+
 int
 revokeproc(int fd, const char *certfile, int force,
     int revocate, const char *const *alts, size_t altsz)
@@ -165,13 +170,13 @@ revokeproc(int fd, const char *certfile, int force,
 	 * command line.
 	 */
 
-	extsz = x->cert_info->extensions != NULL ?
-		sk_X509_EXTENSION_num(x->cert_info->extensions) : 0;
+	const STACK_OF(X509_EXTENSION) *exts = X509_get0_extensions(x);
+	extsz = exts != NULL ? sk_X509_EXTENSION_num(exts) : 0;
 
 	/* Scan til we find the SAN NID. */
 
 	for (i = 0; i < extsz; i++) {
-		ex = sk_X509_EXTENSION_value(x->cert_info->extensions, i);
+		ex = sk_X509_EXTENSION_value(exts, i);
 		assert(ex != NULL);
 		obj = X509_EXTENSION_get_object(ex);
 		assert(obj != NULL);
@@ -190,12 +195,12 @@ revokeproc(int fd, const char *certfile, int force,
 		} else if (!X509V3_EXT_print(bio, ex, 0, 0)) {
 			warnx("X509V3_EXT_print");
 			goto out;
-		} else if ((san = calloc(1, bio->num_write + 1)) == NULL) {
+		} else if ((san = calloc(1, BIO_number_written(bio) + 1)) == NULL) {
 			warn("calloc");
 			goto out;
 		}
-		ssz = BIO_read(bio, san, bio->num_write);
-		if (ssz < 0 || (unsigned)ssz != bio->num_write) {
+		ssz = BIO_read(bio, san, BIO_number_written(bio));
+		if (ssz < 0 || (unsigned)ssz != BIO_number_written(bio)) {
 			warnx("BIO_read");
 			goto out;
 		}

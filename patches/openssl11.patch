@@ -1,0 +1,185 @@
+--- acctproc.c
++++ acctproc.c
+@@ -68,6 +68,12 @@ bn2string(const BIGNUM *bn)
+ 	return bbuf;
+ }
+ 
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
++#define RSA_get0_n(r) ((r)->n)
++#define RSA_get0_e(r) ((r)->e)
++#define EVP_PKEY_id(pkey) ((pkey)->type)
++#endif
++
+ /*
+  * Extract the relevant RSA components from the key and create the JSON
+  * thumbprint from them.
+@@ -80,9 +86,9 @@ op_thumb_rsa(EVP_PKEY *pkey)
+ 
+ 	if ((r = EVP_PKEY_get0_RSA(pkey)) == NULL)
+ 		warnx("EVP_PKEY_get0_RSA");
+-	else if ((mod = bn2string(r->n)) == NULL)
++	else if ((mod = bn2string(RSA_get0_n(r))) == NULL)
+ 		warnx("bn2string");
+-	else if ((exp = bn2string(r->e)) == NULL)
++	else if ((exp = bn2string(RSA_get0_e(r))) == NULL)
+ 		warnx("bn2string");
+ 	else if ((json = json_fmt_thumb_rsa(exp, mod)) == NULL)
+ 		warnx("json_fmt_thumb_rsa");
+@@ -141,7 +147,7 @@ op_thumbprint(int fd, EVP_PKEY *pkey)
+ 
+ 	/* Construct the thumbprint input itself. */
+ 
+-	switch (EVP_PKEY_type(pkey->type)) {
++	switch (EVP_PKEY_id(pkey)) {
+ 	case EVP_PKEY_RSA:
+ 		if ((thumb = op_thumb_rsa(pkey)) != NULL)
+ 			break;
+@@ -208,9 +214,9 @@ op_sign_rsa(char **prot, EVP_PKEY *pkey, const char *nonce, const char *url)
+ 
+ 	if ((r = EVP_PKEY_get0_RSA(pkey)) == NULL)
+ 		warnx("EVP_PKEY_get0_RSA");
+-	else if ((mod = bn2string(r->n)) == NULL)
++	else if ((mod = bn2string(RSA_get0_n(r))) == NULL)
+ 		warnx("bn2string");
+-	else if ((exp = bn2string(r->e)) == NULL)
++	else if ((exp = bn2string(RSA_get0_e(r))) == NULL)
+ 		warnx("bn2string");
+ 	else if ((*prot = json_fmt_protected_rsa(exp, mod, nonce, url)) == NULL)
+ 		warnx("json_fmt_protected_rsa");
+@@ -298,7 +304,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
+ 		goto out;
+ 	}
+ 
+-	switch (EVP_PKEY_type(pkey->type)) {
++	switch (EVP_PKEY_id(pkey)) {
+ 	case EVP_PKEY_RSA:
+ 		alg = "RS256";
+ 		evp_md = EVP_sha256();
+@@ -319,7 +325,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
+ 			goto out;
+ 		}
+ 	} else {
+-		switch (EVP_PKEY_type(pkey->type)) {
++		switch (EVP_PKEY_id(pkey)) {
+ 		case EVP_PKEY_RSA:
+ 			if (!op_sign_rsa(&prot, pkey, nonce, url))
+ 				goto out;
+@@ -374,7 +380,7 @@ op_sign(int fd, EVP_PKEY *pkey, enum acctop op)
+ 		goto out;
+ 	}
+ 
+-	switch (EVP_PKEY_type(pkey->type)) {
++	switch (EVP_PKEY_id(pkey)) {
+ 	case EVP_PKEY_RSA:
+ 		if ((dig64 = base64buf_url((char *)dig, digsz)) == NULL) {
+ 			warnx("base64buf_url");
+@@ -486,7 +492,9 @@ acctproc(int netsock, const char *acctkey, enum keytype keytype)
+ 
+ 	/* File-system, user, and sandbox jailing. */
+ 
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+ 	ERR_load_crypto_strings();
++#endif
+ 
+ 	if (pledge("stdio", NULL) == -1) {
+ 		warn("pledge");
+@@ -567,6 +575,8 @@ out:
+ 		fclose(f);
+ 	EVP_PKEY_free(pkey);
+ 	ERR_print_errors_fp(stderr);
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+ 	ERR_free_strings();
++#endif
+ 	return rc;
+ }
+--- key.c
++++ key.c
+@@ -127,6 +127,9 @@ out:
+ }
+ 
+ 
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
++#define EVP_PKEY_id(pkey) ((pkey)->type)
++#endif
+ 
+ EVP_PKEY *
+ key_load(FILE *f, const char *fname)
+@@ -137,8 +140,8 @@ key_load(FILE *f, const char *fname)
+ 	if (pkey == NULL) {
+ 		warnx("%s: PEM_read_PrivateKey", fname);
+ 		return NULL;
+-	} else if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA ||
+-		   EVP_PKEY_type(pkey->type) == EVP_PKEY_EC )
++	} else if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA ||
++		   EVP_PKEY_id(pkey) == EVP_PKEY_EC )
+ 		return pkey;
+ 
+ 	warnx("%s: unsupported key type", fname);
+--- keyproc.c
++++ keyproc.c
+@@ -110,7 +110,9 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
+ 
+ 	/* File-system, user, and sandbox jail. */
+ 
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+ 	ERR_load_crypto_strings();
++#endif
+ 
+ 	if (pledge("stdio", NULL) == -1) {
+ 		warn("pledge");
+@@ -270,6 +272,8 @@ out:
+ 	X509_NAME_free(name);
+ 	EVP_PKEY_free(pkey);
+ 	ERR_print_errors_fp(stderr);
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+ 	ERR_free_strings();
++#endif
+ 	return rc;
+ }
+--- revokeproc.c
++++ revokeproc.c
+@@ -91,6 +91,11 @@ X509expires(X509 *x)
+ 	return mktime(&t);
+ }
+ 
++#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
++#define X509_get0_extensions(x) ((x)->cert_info->extensions)
++#define BIO_number_written(bio) ((bio)->num_write)
++#endif
++
+ int
+ revokeproc(int fd, const char *certfile, int force,
+     int revocate, const char *const *alts, size_t altsz)
+@@ -165,13 +170,13 @@ revokeproc(int fd, const char *certfile, int force,
+ 	 * command line.
+ 	 */
+ 
+-	extsz = x->cert_info->extensions != NULL ?
+-		sk_X509_EXTENSION_num(x->cert_info->extensions) : 0;
++	const STACK_OF(X509_EXTENSION) *exts = X509_get0_extensions(x);
++	extsz = exts != NULL ? sk_X509_EXTENSION_num(exts) : 0;
+ 
+ 	/* Scan til we find the SAN NID. */
+ 
+ 	for (i = 0; i < extsz; i++) {
+-		ex = sk_X509_EXTENSION_value(x->cert_info->extensions, i);
++		ex = sk_X509_EXTENSION_value(exts, i);
+ 		assert(ex != NULL);
+ 		obj = X509_EXTENSION_get_object(ex);
+ 		assert(obj != NULL);
+@@ -190,12 +195,12 @@ revokeproc(int fd, const char *certfile, int force,
+ 		} else if (!X509V3_EXT_print(bio, ex, 0, 0)) {
+ 			warnx("X509V3_EXT_print");
+ 			goto out;
+-		} else if ((san = calloc(1, bio->num_write + 1)) == NULL) {
++		} else if ((san = calloc(1, BIO_number_written(bio) + 1)) == NULL) {
+ 			warn("calloc");
+ 			goto out;
+ 		}
+-		ssz = BIO_read(bio, san, bio->num_write);
+-		if (ssz < 0 || (unsigned)ssz != bio->num_write) {
++		ssz = BIO_read(bio, san, BIO_number_written(bio));
++		if (ssz < 0 || (unsigned)ssz != BIO_number_written(bio)) {
+ 			warnx("BIO_read");
+ 			goto out;
+ 		}

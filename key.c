@@ -127,6 +127,9 @@ out:
 }
 
 
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
+#define EVP_PKEY_id(pkey) ((pkey)->type)
+#endif
 
 EVP_PKEY *
 key_load(FILE *f, const char *fname)
@@ -137,8 +140,8 @@ key_load(FILE *f, const char *fname)
 	if (pkey == NULL) {
 		warnx("%s: PEM_read_PrivateKey", fname);
 		return NULL;
-	} else if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA ||
-		   EVP_PKEY_type(pkey->type) == EVP_PKEY_EC )
+	} else if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA ||
+		   EVP_PKEY_id(pkey) == EVP_PKEY_EC )
 		return pkey;
 
 	warnx("%s: unsupported key type", fname);

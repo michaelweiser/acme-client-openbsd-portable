@@ -1,4 +1,4 @@
-PKG_CHECK_MODULES([libcrypto], [libcrypto >= 2.4.0])
+PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.0.1])
 PKG_CHECK_MODULES([libtls], [libtls >= 2.4.0])
 AS_IF([test "x$with_seccomp" != xno],
 	[PKG_CHECK_MODULES([libseccomp], [libseccomp],

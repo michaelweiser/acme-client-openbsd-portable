@@ -97,9 +97,9 @@ CFLAGS="$CFLAGS $libtls_CFLAGS"
 LIBS="$LIBS $libtls_LIBS"
 AC_CHECK_FUNCS([tls_default_ca_cert_file],
 	[AS_IF([test "${with_default_ca_file+set}" = set],
-		[AC_MSG_WARN([tls_default_ca_cert_file of libressl is in use.
+		[AC_MSG_WARN([tls_default_ca_cert_file of libtls is in use.
 	--with-default-ca-file will have no effect.
-	Please configure libressl accordingly instead.])])],
+	Please configure LibreSSL/OpenSSL accordingly instead.])])],
 	[AC_LIBOBJ([tls_default_ca_cert_file])
 	 AS_IF([test "${with_default_ca_file+set}" = set],[],
 		[AC_MSG_NOTICE([Using CA certificate bundle at $defaultcafile.
