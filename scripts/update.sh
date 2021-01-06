@@ -66,6 +66,7 @@ rm -rf "$os"
 # Redirect some includes to augmented ones with additional definitions.
 # Have all files source config.h if not already present.
 # Silence warnings from attempt to declare replacement functions weak.
+# Silence warnings from bounded attribute which only exists on OpenBSD.
 for i in "$tmpdir"/*.[chy] ; do
 	sed -e 's,<stdlib\.h>,"bsd-stdlib.h",g' \
 		-e 's,<string\.h>,"bsd-string.h",g' \
@@ -77,6 +78,7 @@ for i in "$tmpdir"/*.[chy] ; do
 		-e 's,<tls.h>,"libressl-tls.h",g' \
 		-e "/include.*includes\.h/s/includes\.h/config.h/" \
 		-e "/^DEF_WEAK/d" \
+		-e "s,__attribute__[[:space:]]*((__bounded__([^)]*))),," \
 		$i | \
 	awk '/^#include.*"config\.h"/ { x=1 }
 		/^#include/ && !x { print "#include \"config.h\""  ; x=1 } 1' \
