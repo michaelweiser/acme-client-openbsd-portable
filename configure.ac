@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([acme-client], [0.5], [https://github.com/michaelweiser/acme-client-openbsd-portable.git])
+AC_INIT([acme-client], [0.6], [https://github.com/michaelweiser/acme-client-openbsd-portable.git])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 m4_include([m4/act_search_libs.m4])
 m4_include([m4/act_check_program.m4])
