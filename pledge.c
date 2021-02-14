@@ -304,6 +304,7 @@ static struct {
 		{ SCMP_A5(SCMP_CMP_EQ, sizeof(struct sockaddr_nl)) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "recvmsg", 0 },
 
+	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "link", 0 },
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "unlink", 0 },
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "rename", 0 },
 
