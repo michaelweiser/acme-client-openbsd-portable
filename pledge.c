@@ -170,6 +170,7 @@ static struct {
 		  SCMP_A2(SCMP_CMP_EQ, (uint64_t)INT_MAX) }},
 
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "fstat", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "newfstatat", 0 },
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "lseek", 0 },
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "read", 0 },
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "readv", 0 }, /* musl */
