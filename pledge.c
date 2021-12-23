@@ -311,6 +311,7 @@ static struct {
 
 	/* glibc 2.28+ qsort pagesize libressl */
 	{ PLEDGE_INET, SCMP_ACT_ALLOW, "sysinfo", 0 },
+	{ PLEDGE_INET, SCMP_ACT_ALLOW, "clock_nanosleep", 0 },
 
 	{ PLEDGE_FATTR, SCMP_ACT_ALLOW, "fchmod", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, S_IRWXU|S_IRWXG|S_IRWXO,
