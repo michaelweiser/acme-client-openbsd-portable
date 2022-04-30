@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.69])
+AC_PREREQ([2.71])
 AC_INIT([acme-client], [0.6.2], [https://github.com/michaelweiser/acme-client-openbsd-portable.git])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 m4_include([m4/act_search_libs.m4])
@@ -24,7 +24,7 @@ m4_include([m4/libs.m4])
 # Checks for header files.
 AC_FUNC_ALLOCA
 AC_HEADER_RESOLV
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h limits.h malloc.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h strings.h sys/ioctl.h sys/param.h sys/socket.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h malloc.h netdb.h netinet/in.h stdint.h strings.h sys/ioctl.h sys/socket.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_UID_T

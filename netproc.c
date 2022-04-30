@@ -1,4 +1,4 @@
-/*	$Id: netproc.c,v 1.29 2020/12/24 08:17:49 florian Exp $ */
+/*	$Id: netproc.c,v 1.31 2021/08/24 10:07:30 benno Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -34,7 +34,7 @@
 #define RETRY_MAX 10
 
 /*
- * Buffer used when collecting the results of a CURL transfer.
+ * Buffer used when collecting the results of an http transfer.
  */
 struct	buf {
 	char	*buf; /* binary buffer */
@@ -42,7 +42,7 @@ struct	buf {
 };
 
 /*
- * Used for CURL communications.
+ * Used for communication with other processes.
  */
 struct	conn {
 	const char	  *newnonce; /* nonce authority */
@@ -689,7 +689,7 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 	memset(&c, 0, sizeof(struct conn));
 
 	if (unveil(tls_default_ca_cert_file(), "r") == -1) {
-		warn("unveil");
+		warn("unveil %s", tls_default_ca_cert_file());
 		goto out;
 	}
 

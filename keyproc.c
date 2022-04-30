@@ -1,4 +1,4 @@
-/*	$Id: keyproc.c,v 1.15 2019/06/15 16:16:31 florian Exp $ */
+/*	$Id: keyproc.c,v 1.16 2021/09/17 20:02:24 sthen Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -110,9 +110,7 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
 
 	/* File-system, user, and sandbox jail. */
 
-#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_load_crypto_strings();
-#endif
 
 	if (pledge("stdio", NULL) == -1) {
 		warn("pledge");
@@ -177,53 +175,51 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
 	 * TODO: is this the best way of doing this?
 	 */
 
-	if (altsz > 1) {
-		nid = NID_subject_alt_name;
-		if ((exts = sk_X509_EXTENSION_new_null()) == NULL) {
-			warnx("sk_X509_EXTENSION_new_null");
-			goto out;
-		}
-		/* Initialise to empty string. */
-		if ((sans = strdup("")) == NULL) {
-			warn("strdup");
-			goto out;
-		}
-		sansz = strlen(sans) + 1;
-
-		/*
-		 * For each SAN entry, append it to the string.
-		 * We need a single SAN entry for all of the SAN
-		 * domains: NOT an entry per domain!
-		 */
-
-		for (i = 1; i < altsz; i++) {
-			cc = asprintf(&san, "%sDNS:%s",
-			    i > 1 ? "," : "", alts[i]);
-			if (cc == -1) {
-				warn("asprintf");
-				goto out;
-			}
-			pp = recallocarray(sans, sansz, sansz + strlen(san), 1);
-			if (pp == NULL) {
-				warn("recallocarray");
-				goto out;
-			}
-			sans = pp;
-			sansz += strlen(san);
-			strlcat(sans, san, sansz);
-			free(san);
-			san = NULL;
-		}
-
-		if (!add_ext(exts, nid, sans)) {
-			warnx("add_ext");
-			goto out;
-		} else if (!X509_REQ_add_extensions(x, exts)) {
-			warnx("X509_REQ_add_extensions");
-			goto out;
-		}
-		sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
+	nid = NID_subject_alt_name;
+	if ((exts = sk_X509_EXTENSION_new_null()) == NULL) {
+		warnx("sk_X509_EXTENSION_new_null");
+		goto out;
 	}
+	/* Initialise to empty string. */
+	if ((sans = strdup("")) == NULL) {
+		warn("strdup");
+		goto out;
+	}
+	sansz = strlen(sans) + 1;
+
+	/*
+	 * For each SAN entry, append it to the string.
+	 * We need a single SAN entry for all of the SAN
+	 * domains: NOT an entry per domain!
+	 */
+
+	for (i = 0; i < altsz; i++) {
+		cc = asprintf(&san, "%sDNS:%s",
+		    i ? "," : "", alts[i]);
+		if (cc == -1) {
+			warn("asprintf");
+			goto out;
+		}
+		pp = recallocarray(sans, sansz, sansz + strlen(san), 1);
+		if (pp == NULL) {
+			warn("recallocarray");
+			goto out;
+		}
+		sans = pp;
+		sansz += strlen(san);
+		strlcat(sans, san, sansz);
+		free(san);
+		san = NULL;
+	}
+
+	if (!add_ext(exts, nid, sans)) {
+		warnx("add_ext");
+		goto out;
+	} else if (!X509_REQ_add_extensions(x, exts)) {
+		warnx("X509_REQ_add_extensions");
+		goto out;
+	}
+	sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
 
 	/* Sign the X509 request using SHA256. */
 
@@ -272,8 +268,6 @@ out:
 	X509_NAME_free(name);
 	EVP_PKEY_free(pkey);
 	ERR_print_errors_fp(stderr);
-#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
 	ERR_free_strings();
-#endif
 	return rc;
 }

@@ -1,4 +1,4 @@
-/*	$Id: key.c,v 1.2 2019/06/17 15:41:59 florian Exp $ */
+/*	$Id: key.c,v 1.6 2022/02/22 13:45:09 tb Exp $ */
 /*
  * Copyright (c) 2019 Renaud Allard <renaud@allard.it>
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -91,7 +91,7 @@ ec_key_create(FILE *f, const char *fname)
 		warnx("EC_KEY_generate_key");
 		goto err;
 	}
-	
+
 	/* set OPENSSL_EC_NAMED_CURVE to be able to load the key */
 
 	EC_KEY_set_asn1_flag(eckey, OPENSSL_EC_NAMED_CURVE);
@@ -99,13 +99,13 @@ ec_key_create(FILE *f, const char *fname)
 	/* Serialise the key to the disc in EC format */
 
 	if (!PEM_write_ECPrivateKey(f, eckey, NULL, NULL, 0, NULL, NULL)) {
-		warnx("PEM_write_ECPrivateKey");
+		warnx("%s: PEM_write_ECPrivateKey", fname);
 		goto err;
 	}
 
 	/* Convert the EC key into a PKEY structure */
 
-	if ((pkey=EVP_PKEY_new()) == NULL) {
+	if ((pkey = EVP_PKEY_new()) == NULL) {
 		warnx("EVP_PKEY_new");
 		goto err;
 	}
@@ -114,22 +114,17 @@ ec_key_create(FILE *f, const char *fname)
 		goto err;
 	}
 
-	warnx("%s: PEM_write_ECPrivateKey", fname);
-
 	goto out;
 
 err:
-	EC_KEY_free(eckey);
 	EVP_PKEY_free(pkey);
 	pkey = NULL;
 out:
+	EC_KEY_free(eckey);
 	return pkey;
 }
 
 
-#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x10100000L
-#define EVP_PKEY_id(pkey) ((pkey)->type)
-#endif
 
 EVP_PKEY *
 key_load(FILE *f, const char *fname)
@@ -140,8 +135,9 @@ key_load(FILE *f, const char *fname)
 	if (pkey == NULL) {
 		warnx("%s: PEM_read_PrivateKey", fname);
 		return NULL;
-	} else if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA ||
-		   EVP_PKEY_id(pkey) == EVP_PKEY_EC )
+	}
+	if (EVP_PKEY_base_id(pkey) == EVP_PKEY_RSA ||
+	    EVP_PKEY_base_id(pkey) == EVP_PKEY_EC)
 		return pkey;
 
 	warnx("%s: unsupported key type", fname);
