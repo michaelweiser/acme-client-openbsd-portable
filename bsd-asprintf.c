@@ -30,7 +30,9 @@
 
 #include <errno.h>
 #include "bsd-stdarg.h"
+#include <stdio.h>
 #include "bsd-stdlib.h"
+
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
