@@ -6,7 +6,7 @@ version=0.6.2
 bugurl=https://github.com/michaelweiser/acme-client-openbsd-portable.git
 
 srcdir=$PWD
-upstream=anoncvs@anoncvs.ca.openbsd.org:/cvs
+upstream=anoncvs@anoncvs.eu.openbsd.org:/cvs
 openssh=https://github.com/openssh/openssh-portable.git
 acarchive=git://git.sv.gnu.org/autoconf-archive.git
 
