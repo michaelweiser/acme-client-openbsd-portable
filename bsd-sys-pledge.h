@@ -1,4 +1,4 @@
-/*	$OpenBSD: pledge.h,v 1.48 2023/06/02 17:44:29 cheloha Exp $	*/
+/*	$OpenBSD: pledge.h,v 1.52 2025/07/05 09:24:37 jsg Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -19,7 +19,6 @@
 
 #ifndef _SYS_PLEDGE_H_
 #define _SYS_PLEDGE_H_
-
 
 /*
  * pledge(2) requests
@@ -119,7 +118,6 @@ static const struct {
 int	pledge_syscall(struct proc *, int, uint64_t *);
 int	pledge_fail(struct proc *, int, uint64_t);
 
-struct mbuf;
 struct nameidata;
 int	pledge_namei(struct proc *, struct nameidata *, char *);
 int	pledge_sendfd(struct proc *p, struct file *);
@@ -133,11 +131,11 @@ int	pledge_socket(struct proc *p, int domain, unsigned int state);
 int	pledge_ioctl(struct proc *p, long com, struct file *);
 int	pledge_ioctl_drm(struct proc *p, long com, dev_t device);
 int	pledge_ioctl_vmm(struct proc *p, long com);
+int	pledge_ioctl_psp(struct proc *p, long com);
 int	pledge_flock(struct proc *p);
 int	pledge_fcntl(struct proc *p, int cmd);
 int	pledge_swapctl(struct proc *p, int cmd);
 int	pledge_kill(struct proc *p, pid_t pid);
-int	pledge_profil(struct proc *, u_int);
 int	pledge_protexec(struct proc *p, int prot);
 
 #endif /* _KERNEL */

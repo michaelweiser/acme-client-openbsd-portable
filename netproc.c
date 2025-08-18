@@ -1,4 +1,4 @@
-/*	$Id: netproc.c,v 1.33 2022/12/14 18:32:26 florian Exp $ */
+/*	$Id: netproc.c,v 1.44 2025/06/12 15:46:28 florian Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -20,6 +20,8 @@
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
+#include <limits.h>
+#include <stdio.h>
 #include "bsd-stdlib.h"
 #include "bsd-string.h"
 #include "bsd-unistd.h"
@@ -55,34 +57,19 @@ struct	conn {
 /*
  * If something goes wrong (or we're tracing output), we dump the
  * current transfer's data as a debug message.
- * Make sure that print all non-printable characters as question marks
- * so that we don't spam the console.
- * Also, consolidate white-space.
- * This of course will ruin string literals, but the intent here is just
- * to show the message, not to replicate it.
  */
 static void
 buf_dump(const struct buf *buf)
 {
-	size_t	 i;
-	int	 j;
 	char	*nbuf;
 
 	if (buf->sz == 0)
 		return;
-	if ((nbuf = malloc(buf->sz)) == NULL)
-		err(EXIT_FAILURE, "malloc");
-
-	for (j = 0, i = 0; i < buf->sz; i++)
-		if (isspace((unsigned char)buf->buf[i])) {
-			nbuf[j++] = ' ';
-			while (isspace((unsigned char)buf->buf[i]))
-				i++;
-			i--;
-		} else
-			nbuf[j++] = isprint((unsigned char)buf->buf[i]) ?
-			    buf->buf[i] : '?';
-	dodbg("transfer buffer: [%.*s] (%zu bytes)", j, nbuf, buf->sz);
+	/* must be at least 4 * srclen + 1 long */
+	if ((nbuf = calloc(buf->sz + 1, 4)) == NULL)
+		err(EXIT_FAILURE, "calloc");
+	strvisx(nbuf, buf->buf, buf->sz, VIS_SAFE);
+	dodbg("transfer buffer: [%s] (%zu bytes)", nbuf, buf->sz);
 	free(nbuf);
 }
 
@@ -103,14 +90,8 @@ url2host(const char *host, short *port, char **path)
 			warn("strdup");
 			return NULL;
 		}
-	} else if (strncmp(host, "http://", 7) == 0) {
-		*port = 80;
-		if ((url = strdup(host + 7)) == NULL) {
-			warn("strdup");
-			return NULL;
-		}
 	} else {
-		warnx("%s: unknown schema", host);
+		warnx("%s: RFC 8555 requires https for the API server", host);
 		return NULL;
 	}
 
@@ -125,6 +106,21 @@ url2host(const char *host, short *port, char **path)
 		warn("strdup");
 		free(url);
 		return NULL;
+	}
+
+	/* extract port */
+	if ((ep = strchr(url, ':')) != NULL) {
+		const char *errstr;
+
+		*ep = '\0';
+		*port = strtonum(ep + 1, 1, USHRT_MAX, &errstr);
+		if (errstr != NULL) {
+			warn("port is %s: %s", errstr, ep + 1);
+			free(*path);
+			*path = NULL;
+			free(url);
+			return NULL;
+		}
 	}
 
 	return url;
@@ -266,6 +262,7 @@ sreq(struct conn *c, const char *addr, int kid, const char *req, char **loc)
 	struct httphead	*h;
 	ssize_t		 ssz;
 	long		 code;
+	int		 retry = 0;
 
 	if ((host = url2host(c->newnonce, &port, &path)) == NULL)
 		return -1;
@@ -294,6 +291,7 @@ sreq(struct conn *c, const char *addr, int kid, const char *req, char **loc)
 	}
 	http_get_free(g);
 
+ again:
 	/*
 	 * Send the url, nonce and request payload to the acctproc.
 	 * This will create the proper JSON object we need.
@@ -352,6 +350,46 @@ sreq(struct conn *c, const char *addr, int kid, const char *req, char **loc)
 	} else
 		memcpy(c->buf.buf, g->bodypart, c->buf.sz);
 
+	if (code == 400) {
+		struct jsmnn	*j;
+		char		*type;
+
+		j = json_parse(c->buf.buf, c->buf.sz);
+		if (j == NULL) {
+			code = -1;
+			goto out;
+		}
+
+		type = json_getstr(j, "type");
+		json_free(j);
+
+		if (type == NULL) {
+			code = -1;
+			goto out;
+		}
+
+		if (strcmp(type, "urn:ietf:params:acme:error:badNonce") != 0) {
+			free(type);
+			goto out;
+		}
+		free(type);
+
+		if (retry++ < RETRY_MAX) {
+			h = http_head_get("Replay-Nonce", g->head, g->headsz);
+			if (h == NULL) {
+				warnx("no replay nonce");
+				code = -1;
+				goto out;
+			} else if ((nonce = strdup(h->val)) == NULL) {
+				warn("strdup");
+				code = -1;
+				goto out;
+			}
+			http_get_free(g);
+			goto again;
+		}
+	}
+ out:
 	if (loc != NULL) {
 		free(*loc);
 		*loc = NULL;
@@ -375,7 +413,7 @@ donewacc(struct conn *c, const struct capaths *p, const char *contact)
 {
 	struct jsmnn	*j = NULL;
 	int		 rc = 0;
-	char		*req, *detail, *error = NULL;
+	char		*req, *detail, *error = NULL, *accturi = NULL;
 	long		 lc;
 
 	if ((req = json_fmt_newacc(contact)) == NULL)
@@ -400,6 +438,12 @@ donewacc(struct conn *c, const struct capaths *p, const char *contact)
 	else
 		rc = 1;
 
+	if (c->kid != NULL) {
+		if (stravis(&accturi, c->kid, VIS_SAFE) != -1)
+			printf("account key: %s\n", accturi);
+		free(accturi);
+	}
+
 	if (rc == 0 || verbose > 1)
 		buf_dump(&c->buf);
 	free(req);
@@ -415,7 +459,7 @@ static int
 dochkacc(struct conn *c, const struct capaths *p, const char *contact)
 {
 	int		 rc = 0;
-	char		*req;
+	char		*req, *accturi = NULL;
 	long		 lc;
 
 	if ((req = json_fmt_chkacc()) == NULL)
@@ -433,6 +477,11 @@ dochkacc(struct conn *c, const struct capaths *p, const char *contact)
 
 	if (c->kid == NULL)
 		rc = 0;
+	else {
+		if (stravis(&accturi, c->kid, VIS_SAFE) != -1)
+			dodbg("account key: %s", accturi);
+		free(accturi);
+	}
 
 	if (rc == 0 || verbose > 1)
 		buf_dump(&c->buf);
@@ -677,9 +726,9 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
     int revocate, struct authority_c *authority,
     const char *const *alts, size_t altsz)
 {
-	int		 rc = 0;
+	int		 rc = 0, retries = 0;
 	size_t		 i;
-	char		*cert = NULL, *thumb = NULL, *url = NULL, *error = NULL;
+	char		*cert = NULL, *thumb = NULL, *error = NULL;
 	struct conn	 c;
 	struct capaths	 paths;
 	struct order	 order;
@@ -699,7 +748,7 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 		goto out;
 	}
 
-	if (http_init() == -1) {
+	if (http_init(authority->insecure) == -1) {
 		warn("http_init");
 		goto out;
 	}
@@ -867,6 +916,9 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 			if (!docert(&c, order.finalize, cert))
 				goto out;
 			break;
+		case ORDER_PROCESSING:
+			/* we'll just retry */
+			break;
 		default:
 			warnx("unhandled status: %d", order.status);
 			goto out;
@@ -875,8 +927,19 @@ netproc(int kfd, int afd, int Cfd, int cfd, int dfd, int rfd,
 			goto out;
 
 		dodbg("order.status %d", order.status);
-		if (order.status == ORDER_PENDING)
+		switch (order.status) {
+		case ORDER_PENDING:
+		case ORDER_PROCESSING:
+			if (retries++ > RETRY_MAX) {
+				warnx("too many retries");
+				goto out;
+			}
 			sleep(RETRY_DELAY);
+			break;
+		default:
+			retries = 0; /* state changed, we made progress */
+			break;
+		}
 	}
 
 	if (order.status != ORDER_VALID) {
@@ -914,7 +977,6 @@ out:
 	close(dfd);
 	close(rfd);
 	free(cert);
-	free(url);
 	free(thumb);
 	free(c.kid);
 	free(c.buf.buf);

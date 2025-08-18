@@ -1,4 +1,4 @@
-/*	$Id: main.c,v 1.55 2022/05/05 19:51:35 florian Exp $ */
+/*	$Id: main.c,v 1.56 2024/06/19 13:13:25 claudio Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -22,6 +22,7 @@
 #include <err.h>
 #include <libgen.h>
 #include <locale.h>
+#include <signal.h>
 #include "bsd-stdarg.h"
 #include <stdio.h>
 #include "bsd-stdlib.h"
@@ -202,6 +203,8 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "socketpair");
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, rvk_fds) == -1)
 		err(EXIT_FAILURE, "socketpair");
+
+	signal(SIGPIPE, SIG_IGN);
 
 	/* Start with the network-touching process. */
 
