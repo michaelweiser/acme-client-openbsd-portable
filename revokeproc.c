@@ -87,6 +87,7 @@ revokeproc(int fd, const char *certfile, int force,
 
 	/* File-system and sandbox jailing. */
 
+	OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL);
 	ERR_load_crypto_strings();
 
 	if (pledge("stdio", NULL) == -1) {
