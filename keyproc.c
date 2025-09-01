@@ -110,6 +110,7 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
 
 	/* File-system, user, and sandbox jail. */
 
+	OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL);
 	ERR_load_crypto_strings();
 
 	if (pledge("stdio", NULL) == -1) {

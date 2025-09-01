@@ -1,0 +1,26 @@
+Prevent implicit config file accesses by OpenSSL. libretls does the same.
+
+diff --git a/acctproc.c b/acctproc.c
+index f15d410..db82674 100644
+--- acctproc.c
++++ acctproc.c
+@@ -475,6 +475,7 @@ acctproc(int netsock, const char *acctkey, enum keytype keytype)
+ 
+ 	/* File-system, user, and sandbox jailing. */
+ 
++	OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL);
+ 	ERR_load_crypto_strings();
+ 
+ 	if (pledge("stdio", NULL) == -1) {
+diff --git a/keyproc.c b/keyproc.c
+index 2465794..193b2b9 100644
+--- keyproc.c
++++ keyproc.c
+@@ -110,6 +110,7 @@ keyproc(int netsock, const char *keyfile, const char **alts, size_t altsz,
+ 
+ 	/* File-system, user, and sandbox jail. */
+ 
++	OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL);
+ 	ERR_load_crypto_strings();
+ 
+ 	if (pledge("stdio", NULL) == -1) {

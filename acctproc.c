@@ -475,6 +475,7 @@ acctproc(int netsock, const char *acctkey, enum keytype keytype)
 
 	/* File-system, user, and sandbox jailing. */
 
+	OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL);
 	ERR_load_crypto_strings();
 
 	if (pledge("stdio", NULL) == -1) {
