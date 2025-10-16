@@ -80,7 +80,7 @@ AC_CHECK_FUNCS([setprogname],[],
 	[AC_LIBOBJ([setprogname])
 	 ACT_CHECK_PROGRAM([__progname],
 		[[extern char *__progname;]],
-		[[printf("%s", __progname);]])])
+		[[__progname = "";]])])
 
 # statically disable b64_pton in b64_ntop.c because we do not need it
 AC_DEFINE([HAVE_B64_PTON],[1],[not needed])
