@@ -50,6 +50,8 @@
 #include <netinet/in.h> /* sockaddr_{in,in6} */
 #include <sys/un.h> /* sockaddr_un */
 #include <sys/ioctl.h> /* FIONREAD */
+#include <linux/prctl.h>  /* PR_CAPBSET_READ */
+#include <linux/capability.h> /* CAP_MAC_OVERRIDE */
 #include <fcntl.h> /* O_RDWR */
 #include <linux/netlink.h> /* sockaddr_nl */
 #include <linux/futex.h> /* FUTEX_WAKE_PRIVATE */
@@ -187,6 +189,7 @@ static struct {
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "rt_sigaction", 1,
 		{ SCMP_A0(SCMP_CMP_EQ, SIGPIPE) }},
 	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "rt_sigreturn", 0 },
+	{ PLEDGE_STDIO, SCMP_ACT_ALLOW, "rt_sigprocmask", 0 },
 
 	/* order is important here: the first specification a pledge run runs
 	 * into wins */
@@ -203,17 +206,42 @@ static struct {
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},*/
 
 	/* /etc/resolv.conf */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, CAP_MAC_OVERRIDE) }},
+	{ PLEDGE_DNS, SCMP_ACT_ERRNO(EINVAL), "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, 0x30) }}, /* unclear, no constant, EINVAL on x86_64 */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, CAP_CHECKPOINT_RESTORE) }},
+	{ PLEDGE_DNS, SCMP_ACT_ERRNO(EINVAL), "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, 0x2c) }},
+	{ PLEDGE_DNS, SCMP_ACT_ERRNO(EINVAL), "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, 0x2a) }},
+	{ PLEDGE_DNS, SCMP_ACT_ERRNO(EINVAL), "prctl", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, PR_CAPBSET_READ),
+		  SCMP_A1(SCMP_CMP_EQ, 0x29) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
 		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "setsockopt", 2, /* glibc 2.30+ */
-		{ SCMP_A1(SCMP_CMP_EQ, (uint32_t)IPPROTO_IP),
-		  SCMP_A2(SCMP_CMP_EQ, (uint32_t)IP_RECVERR) }},
+		{ SCMP_A1(SCMP_CMP_EQ, IPPROTO_IP),
+		  SCMP_A2(SCMP_CMP_EQ, IP_RECVERR) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "setsockopt", 2, /* glibc 2.30+ */
-		{ SCMP_A1(SCMP_CMP_EQ, (uint32_t)IPPROTO_IPV6),
-		  SCMP_A2(SCMP_CMP_EQ, (uint32_t)IP_RECVERR) }},
+		{ SCMP_A1(SCMP_CMP_EQ, IPPROTO_IPV6),
+		  SCMP_A2(SCMP_CMP_EQ, IP_RECVERR) }},
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "uname", 0 },
+
+	/* direct calls with 64-bit sign-extended AT_FDCWD, e.g. systemd's
+	 * nss-mymachines */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "openat", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, (uint64_t)AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 
 	/* /etc/localtime, zoneinfo */
 	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "open", 1,
@@ -304,6 +332,11 @@ static struct {
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "sendto", 1,
 		{ SCMP_A5(SCMP_CMP_EQ, sizeof(struct sockaddr_nl)) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "recvmsg", 0 },
+
+	/* systemd nss-resolve /run/systemd/resolve/io.systemd.Resolve */
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "connect", 1,
+		{ SCMP_A2(SCMP_CMP_EQ, 42) } },
+	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "ppoll", 0 },
 
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "link", 0 },
 	{ PLEDGE_CPATH, SCMP_ACT_ALLOW, "unlink", 0 },
