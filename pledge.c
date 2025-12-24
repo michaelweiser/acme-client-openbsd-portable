@@ -256,6 +256,10 @@ static struct {
 	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2,
 		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD), /* glibc 2.26+ */
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
+	/* newer mkstemp also seems to 64-bit sign-extend AT_FDCWD */
+	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2,
+		{ SCMP_A0(SCMP_CMP_EQ, (uint64_t)AT_FDCWD),
+		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
 
 	/* dns: resolver, inet: ACME */
 	{ PLEDGE_DNS | PLEDGE_INET, SCMP_ACT_ALLOW, "socket", 3, /* IPv4 TCP */
