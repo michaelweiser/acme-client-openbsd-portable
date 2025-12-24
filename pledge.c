@@ -603,7 +603,6 @@ int seatbelt_add_param(const char *param, const char *value) {
 		value_copy = strdup(value);
 
 	if (value_copy == NULL) {
-		warn("foo?");
 		free(param_copy);
 		return -1;
 	}
