@@ -196,13 +196,13 @@ static struct {
 	{ PLEDGE_WPATH, SCMP_ACT_ALLOW, "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_WRONLY) }},
 	{ PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
-		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD),
+		{ SCMP_A0_32(SCMP_CMP_EQ, AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_WRONLY) }},
 
 	/*{ PLEDGE_RPATH, SCMP_ACT_ALLOW, "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_RPATH, SCMP_ACT_ALLOW, "openat", 2,
-		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD),
+		{ SCMP_A0_32(SCMP_CMP_EQ, AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},*/
 
 	/* /etc/resolv.conf */
@@ -227,7 +227,7 @@ static struct {
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "openat", 2, /* glibc 2.26+ */
-		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD),
+		{ SCMP_A0_32(SCMP_CMP_EQ, AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_DNS, SCMP_ACT_ALLOW, "setsockopt", 2, /* glibc 2.30+ */
 		{ SCMP_A1(SCMP_CMP_EQ, IPPROTO_IP),
@@ -247,18 +247,18 @@ static struct {
 	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 	{ PLEDGE_STDIO | PLEDGE_INET, SCMP_ACT_ERRNO(ENOENT), "openat", 2,
-		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD), /* glibc 2.26+ */
+		{ SCMP_A0_32(SCMP_CMP_EQ, AT_FDCWD), /* glibc 2.26+ */
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDONLY) }},
 
 	/* mkstemp */
 	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "open", 1,
 		{ SCMP_A1(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
 	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2,
-		{ SCMP_A0(SCMP_CMP_EQ, (uint32_t)AT_FDCWD), /* glibc 2.26+ */
+		{ SCMP_A0_32(SCMP_CMP_EQ, AT_FDCWD), /* glibc 2.26+ */
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
 	/* newer mkstemp also seems to 64-bit sign-extend AT_FDCWD */
 	{ PLEDGE_RPATH | PLEDGE_WPATH, SCMP_ACT_ALLOW, "openat", 2,
-		{ SCMP_A0(SCMP_CMP_EQ, (uint64_t)AT_FDCWD),
+		{ SCMP_A0_64(SCMP_CMP_EQ, AT_FDCWD),
 		  SCMP_A2(SCMP_CMP_MASKED_EQ, O_ACCMODE, O_RDWR) }},
 
 	/* dns: resolver, inet: ACME */
