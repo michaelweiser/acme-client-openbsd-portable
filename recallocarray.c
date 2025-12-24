@@ -22,9 +22,7 @@
 
 #include <errno.h>
 #include "bsd-stdlib.h"
-#ifdef HAVE_STDINT_H
 #include <stdint.h>
-#endif
 #include "bsd-string.h"
 #include "bsd-unistd.h"
 #include "bsd-strings.h"	/* explicit_bzero(3) */

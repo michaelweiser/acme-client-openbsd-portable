@@ -1,4 +1,4 @@
-/*	$Id: http.c,v 1.35 2025/06/10 16:00:28 florian Exp $ */
+/*	$Id: http.c,v 1.37 2025/12/17 12:40:40 sthen Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -234,10 +234,10 @@ again:
 	}
 
 	if (c < 0) {
-		warn("%s: inet_ntop", addrs[cur].ip);
+		warn("%s: inet_pton", addrs[cur].ip);
 		goto again;
 	} else if (c == 0) {
-		warnx("%s: inet_ntop", addrs[cur].ip);
+		warnx("%s: inet_pton", addrs[cur].ip);
 		goto again;
 	}
 
@@ -299,31 +299,40 @@ http_open(const struct http *http, int headreq, const void *p, size_t psz)
 	char		*req;
 	int		 c;
 	struct httpxfer	*trans;
+	char		port[16] = "";
+
+	if (http->port != 443) {
+		int rv = snprintf(port, sizeof(port), ":%d", http->port);
+		if (rv == -1 || (size_t)rv >= sizeof(port)) {
+			warnx("%s port printf", __func__);
+			return NULL;
+		}
+	}
 
 	if (p == NULL) {
 		if (headreq)
 			c = asprintf(&req,
 			    "HEAD %s HTTP/1.0\r\n"
-			    "Host: %s:%d\r\n"
+			    "Host: %s%s\r\n"
 			    "User-Agent: OpenBSD-acme-client\r\n"
 			    "\r\n",
-			    http->path, http->host, http->port);
+			    http->path, http->host, port);
 		else
 			c = asprintf(&req,
 			    "GET %s HTTP/1.0\r\n"
-			    "Host: %s:%d\r\n"
+			    "Host: %s%s\r\n"
 			    "User-Agent: OpenBSD-acme-client\r\n"
 			    "\r\n",
-			    http->path, http->host, http->port);
+			    http->path, http->host, port);
 	} else {
 		c = asprintf(&req,
 		    "POST %s HTTP/1.0\r\n"
-		    "Host: %s:%d\r\n"
+		    "Host: %s%s\r\n"
 		    "Content-Length: %zu\r\n"
 		    "Content-Type: application/jose+json\r\n"
 		    "User-Agent: OpenBSD-acme-client\r\n"
 		    "\r\n",
-		    http->path, http->host, http->port, psz);
+		    http->path, http->host, port, psz);
 	}
 
 	if (c == -1) {

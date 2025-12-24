@@ -22,8 +22,9 @@ PKG_PROG_PKG_CONFIG
 m4_include([m4/libs.m4])
 
 # Checks for header files.
+AC_FUNC_ALLOCA
 AC_HEADER_RESOLV
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h strings.h sys/ioctl.h sys/socket.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h malloc.h netdb.h netinet/in.h stdint.h strings.h sys/ioctl.h sys/socket.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_UID_T
@@ -34,6 +35,7 @@ AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
+AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for library functions.
 AC_FUNC_FORK

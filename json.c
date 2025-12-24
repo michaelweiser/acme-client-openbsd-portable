@@ -1,4 +1,4 @@
-/*	$Id: json.c,v 1.21 2020/09/14 16:00:17 florian Exp $ */
+/*	$Id: json.c,v 1.22 2025/09/16 15:06:02 sthen Exp $ */
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -648,7 +648,7 @@ json_fmt_newacc(const char *contact)
  * Format the "newOrder" resource request
  */
 char *
-json_fmt_neworder(const char *const *alts, size_t altsz)
+json_fmt_neworder(const char *const *alts, size_t altsz, const char *profile)
 {
 	size_t	 i;
 	int	 c;
@@ -670,7 +670,10 @@ json_fmt_neworder(const char *const *alts, size_t altsz)
 		}
 		t = p;
 	}
-	c = asprintf(&p, "%s ] }", t);
+	if (profile == NULL)
+		c = asprintf(&p, "%s ] }", t);
+	else
+		c = asprintf(&p, "%s ], \"profile\": \"%s\" }", t, profile);
 	free(t);
 	if (c == -1) {
 		warn("asprintf");

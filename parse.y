@@ -1,4 +1,4 @@
-/*	$OpenBSD: parse.y,v 1.46 2025/06/08 23:53:19 florian Exp $ */
+/*	$OpenBSD: parse.y,v 1.47 2025/09/16 15:06:02 sthen Exp $ */
 
 /*
  * Copyright (c) 2016 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -102,7 +102,8 @@ typedef struct {
 %}
 
 %token	AUTHORITY URL API ACCOUNT CONTACT
-%token	DOMAIN ALTERNATIVE NAME NAMES CERT FULL CHAIN KEY SIGN WITH CHALLENGEDIR
+%token	DOMAIN ALTERNATIVE NAME NAMES CERT FULL CHAIN KEY SIGN WITH
+%token	CHALLENGEDIR PROFILE
 %token	YES NO
 %token	INCLUDE
 %token	ERROR
@@ -398,6 +399,16 @@ domainoptsl	: ALTERNATIVE NAMES '{' optnl altname_l '}'
 				err(EXIT_FAILURE, "strdup");
 			domain->challengedir = s;
 		}
+		| PROFILE STRING {
+			char *s;
+			if (domain->profile != NULL) {
+				yyerror("duplicate profile");
+				YYERROR;
+			}
+			if ((s = strdup($2)) == NULL)
+				err(EXIT_FAILURE, "strdup");
+			domain->profile = s;
+		}
 		;
 
 altname_l	: altname optcommanl altname_l
@@ -476,6 +487,7 @@ lookup(char *s)
 		{"key",			KEY},
 		{"name",		NAME},
 		{"names",		NAMES},
+		{"profile",		PROFILE},
 		{"rsa",			RSA},
 		{"sign",		SIGN},
 		{"url",			URL},
@@ -1089,6 +1101,8 @@ print_config(struct acme_conf *xconf)
 		if (d->fullchain != NULL)
 			printf("\tdomain full chain certificate \"%s\"\n",
 			    d->fullchain);
+		if (d->profile != NULL)
+			printf("\tprofile \"%s\"\n", d->profile);
 		if (d->auth != NULL)
 			printf("\tsign with \"%s\"\n", d->auth);
 		if (d->challengedir != NULL)
